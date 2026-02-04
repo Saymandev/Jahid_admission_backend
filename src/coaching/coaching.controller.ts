@@ -24,8 +24,15 @@ export class CoachingController {
   findAllAdmissions(
     @Query('status') status?: AdmissionStatus,
     @Query('includeDeleted') includeDeleted?: string,
-    @Query() pagination?: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
   ) {
+    const pagination = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search,
+    };
     return this.coachingService.findAllAdmissions(status, includeDeleted === 'true', pagination);
   }
 

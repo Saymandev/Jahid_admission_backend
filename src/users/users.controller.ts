@@ -33,7 +33,16 @@ export class UsersController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  findAll(@Query() pagination?: PaginationDto) {
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    const pagination: PaginationDto = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search,
+    };
     return this.usersService.findAll(pagination);
   }
 

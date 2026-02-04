@@ -41,8 +41,15 @@ export class ResidentialController {
   @Get('rooms')
   findAllRooms(
     @Query('includeDeleted') includeDeleted?: string,
-    @Query() pagination?: PaginationDto,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
   ) {
+    const pagination: PaginationDto = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search,
+    };
     return this.residentialService.findAllRooms(includeDeleted === 'true', pagination);
   }
 
@@ -86,8 +93,15 @@ export class ResidentialController {
   findAllStudents(
     @Query('status') status?: StudentStatus,
     @Query('includeDeleted') includeDeleted?: string,
-    @Query() pagination?: PaginationDto,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
   ) {
+    const pagination: PaginationDto = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search,
+    };
     return this.residentialService.findAllStudents(status, includeDeleted === 'true', pagination);
   }
 
@@ -183,7 +197,17 @@ export class ResidentialController {
 
   // ========== PAYMENT ENDPOINTS ==========
   @Get('payments')
-  getAllPayments(@Query() pagination?: PaginationDto, @CurrentUser() user?: any) {
+  getAllPayments(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const pagination: PaginationDto = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search,
+    };
     // Staff users can only see their own transactions
     const userId = user?.role === 'staff' ? user.sub : undefined;
     return this.residentialService.getAllPayments(pagination, userId);
