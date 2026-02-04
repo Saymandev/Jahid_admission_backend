@@ -9,6 +9,7 @@ import { ResidentialModule } from './residential/residential.module';
 import { CoachingModule } from './coaching/coaching.module';
 import { SocketModule } from './socket/socket.module';
 import { CronModule } from './cron/cron.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -30,5 +31,6 @@ import { CronModule } from './cron/cron.module';
     SocketModule,
     CronModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}
