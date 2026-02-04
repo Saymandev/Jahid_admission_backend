@@ -1,0 +1,68 @@
+import { Controller, Get, Post, Body, Param, UseGuards, Query } from '@nestjs/common';
+import { CoachingService } from './coaching.service';
+import { CreateAdmissionDto } from './dto/create-admission.dto';
+import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { UserRole } from '../users/schemas/user.schema';
+import { AdmissionStatus } from './schemas/admission.schema';
+
+@Controller('coaching')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class CoachingController {
+  constructor(private readonly coachingService: CoachingService) {}
+
+  @Post('admissions')
+  @Roles(UserRole.ADMIN)
+  createAdmission(@Body() createAdmissionDto: CreateAdmissionDto) {
+    return this.coachingService.createAdmission(createAdmissionDto);
+  }
+
+  @Get('admissions')
+  findAllAdmissions(
+    @Query('status') status?: AdmissionStatus,
+    @Query('includeDeleted') includeDeleted?: string,
+    @Query() pagination?: any,
+  ) {
+    return this.coachingService.findAllAdmissions(status, includeDeleted === 'true', pagination);
+  }
+
+  @Get('admissions/archived')
+  @Roles(UserRole.ADMIN)
+  findAllArchivedAdmissions() {
+    return this.coachingService.findAllArchivedAdmissions();
+  }
+
+  @Post('admissions/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreAdmission(@Param('id') id: string) {
+    return this.coachingService.restoreAdmission(id);
+  }
+
+  @Get('admissions/:id')
+  findAdmissionById(@Param('id') id: string) {
+    return this.coachingService.findAdmissionById(id);
+  }
+
+  @Get('payments')
+  getAllPayments() {
+    return this.coachingService.getAllPayments();
+  }
+
+  @Get('admissions/:id/payments')
+  getAdmissionPayments(@Param('id') id: string) {
+    return this.coachingService.getAdmissionPayments(id);
+  }
+
+  @Post('admissions/payments')
+  createPayment(@Body() createPaymentDto: CreateAdmissionPaymentDto, @CurrentUser() user: any) {
+    return this.coachingService.createPayment(createPaymentDto, user.sub);
+  }
+
+  @Get('stats')
+  getAdmissionStats() {
+    return this.coachingService.getAdmissionStats();
+  }
+}
