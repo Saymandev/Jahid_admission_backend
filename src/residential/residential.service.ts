@@ -245,20 +245,28 @@ export class ResidentialService {
 
     // Record Union Fee if provided
     if (createStudentDto.unionFee && createStudentDto.unionFee > 0) {
-      await this.createPayment({
-        studentId: student._id.toString(),
-        billingMonth: new Date().toISOString().slice(0, 7),
-        rentAmount: 0,
-        paidAmount: createStudentDto.unionFee,
-        paymentMethod: 'cash', // Default or need DTO update
-        notes: 'Union Fee (Non-refundable)',
-        transactionId: '',
-        type: 'union_fee' as any, // Cast because we just added the enum
-      } as any, userId);
+      console.log('Creating Union Fee payment:', createStudentDto.unionFee);
+      try {
+        await this.createPayment({
+          studentId: student._id.toString(),
+          billingMonth: new Date().toISOString().slice(0, 7),
+          rentAmount: 0,
+          paidAmount: createStudentDto.unionFee,
+          paymentMethod: 'cash', // Default or need DTO update
+          notes: 'Union Fee (Non-refundable)',
+          transactionId: '',
+          type: 'union_fee', // Pass as string literal
+        } as any, userId);
+        console.log('Union Fee payment created successfully');
+      } catch (error) {
+        console.error('Error creating Union Fee payment:', error);
+        throw error; // Re-throw to see the 500
+      }
     }
 
     // Record Security Deposit if provided
     if (createStudentDto.securityDeposit && createStudentDto.securityDeposit > 0) {
+      console.log('Creating Security Deposit payment:', createStudentDto.securityDeposit);
       // We already set student.securityDeposit above, now record the transaction
       const transaction = new this.securityDepositTransactionModel({
         studentId: student._id,
@@ -278,7 +286,7 @@ export class ResidentialService {
         paymentMethod: 'cash', // Default
         notes: 'Initial Security Deposit',
         transactionId: '',
-        type: 'security' as any,
+        type: 'security',
       } as any, userId);
     }
 
@@ -625,7 +633,14 @@ export class ResidentialService {
     const months = this.generateMonthsSinceJoining(student.joiningDate, currentMonthString);
     
     const paymentMap = new Map();
-    payments.forEach(p => paymentMap.set(p.billingMonth, p));
+    // Filter out non-rent payments so they don't interfere with rent due calculations
+    // Use 'rent' string check or default checks
+    payments.forEach(p => {
+      // Include RENT payments and explicit ADVANCE payments (which hold the advance balance)
+      if (!p.type || p.type === 'rent' || p.type === 'advance' || p.billingMonth === 'ADVANCE') {
+        paymentMap.set(p.billingMonth, p);
+      }
+    });
 
     // Automatically create payment records for past months without payment
     // This ensures dues are automatically tracked when months pass
@@ -801,16 +816,6 @@ export class ResidentialService {
     await advancePayment.save();
 
     await this.createAuditLog('delete', 'Payment', advancePayment._id.toString(), userId, advancePayment.toObject(), null);
-
-    // Emit notification
-    this.socketGateway.emitNotification({
-      id: `advance-deleted-${studentId}`,
-      type: 'payment',
-      title: 'Advance Payment Deleted',
-      message: `Advance payment of ${advancePayment.advanceAmount.toLocaleString()} BDT deleted for ${student.name}`,
-      link: `/dashboard/students/${studentId}`,
-      timestamp: new Date(),
-    });
   }
 
   // ========== PAYMENT METHODS ==========
@@ -821,41 +826,43 @@ export class ResidentialService {
     
     // Handle advance payments (standalone advance for future months)
     if (createPaymentDto.isAdvance) {
-      // For advance payments, use "ADVANCE" as billing month
-      // Check if advance payment already exists
-      const existingAdvance = await this.paymentModel.findOne({
-        studentId: new Types.ObjectId(createPaymentDto.studentId),
-        billingMonth: 'ADVANCE',
-        isDeleted: false,
-      });
-
-      if (existingAdvance) {
-        // Add to existing advance
-        existingAdvance.paidAmount += createPaymentDto.paidAmount;
-        existingAdvance.advanceAmount += createPaymentDto.paidAmount;
-        existingAdvance.paymentMethod = createPaymentDto.paymentMethod as any;
-        existingAdvance.transactionId = createPaymentDto.transactionId;
-        existingAdvance.notes = createPaymentDto.notes || existingAdvance.notes;
-        existingAdvance.recordedBy = new Types.ObjectId(userId);
-        await existingAdvance.save();
-        payment = existingAdvance;
-      } else {
-        // Create new advance payment record
-        payment = new this.paymentModel({
+        console.log('Processing as ADVANCE payment');
+        // Check if advance payment already exists
+        const existingAdvance = await this.paymentModel.findOne({
           studentId: new Types.ObjectId(createPaymentDto.studentId),
           billingMonth: 'ADVANCE',
-          rentAmount: 0, // No rent for advance payments
-          paidAmount: createPaymentDto.paidAmount,
-          dueAmount: 0,
-          advanceAmount: createPaymentDto.paidAmount,
-          paymentMethod: createPaymentDto.paymentMethod as any,
-          transactionId: createPaymentDto.transactionId,
-          notes: createPaymentDto.notes,
-          recordedBy: new Types.ObjectId(userId),
+          isDeleted: false,
         });
-        await payment.save();
-      }
+  
+        if (existingAdvance) {
+          // Add to existing advance
+          existingAdvance.paidAmount += createPaymentDto.paidAmount;
+          existingAdvance.advanceAmount += createPaymentDto.paidAmount;
+          existingAdvance.paymentMethod = createPaymentDto.paymentMethod as any;
+          existingAdvance.transactionId = createPaymentDto.transactionId;
+          existingAdvance.notes = createPaymentDto.notes || existingAdvance.notes;
+          existingAdvance.recordedBy = new Types.ObjectId(userId);
+          await existingAdvance.save();
+          payment = existingAdvance;
+        } else {
+          // Create new advance payment record
+          payment = new this.paymentModel({
+            studentId: new Types.ObjectId(createPaymentDto.studentId),
+            billingMonth: 'ADVANCE',
+            rentAmount: 0, // No rent for advance payments
+            paidAmount: createPaymentDto.paidAmount,
+            dueAmount: 0,
+            advanceAmount: createPaymentDto.paidAmount,
+            paymentMethod: createPaymentDto.paymentMethod as any,
+            transactionId: createPaymentDto.transactionId,
+            notes: createPaymentDto.notes,
+            recordedBy: new Types.ObjectId(userId),
+            type: 'advance' as any,
+          });
+          await payment.save();
+        }
     } else if (createPaymentDto.type === 'union_fee' || createPaymentDto.type === 'security' || createPaymentDto.type === 'other') {
+       console.log(`Processing as SPECIAL payment: ${createPaymentDto.type}`);
        // Handle one-time fees (Union Fee, etc.)
        payment = new this.paymentModel({
           ...createPaymentDto,
