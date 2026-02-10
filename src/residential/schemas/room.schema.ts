@@ -23,7 +23,7 @@ export class Room {
   @Prop({ required: true, min: 1 })
   totalBeds: number;
 
-  @Prop({ required: true, min: 0 })
+  @Prop({ min: 0 })
   monthlyRentPerBed: number;
 
   @Prop({ enum: RoomStatus, default: RoomStatus.AVAILABLE })
