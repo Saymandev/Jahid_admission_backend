@@ -39,4 +39,9 @@ export class CreateStudentDto {
   @Min(0)
   @IsOptional()
   securityDeposit?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  unionFee?: number;
 }

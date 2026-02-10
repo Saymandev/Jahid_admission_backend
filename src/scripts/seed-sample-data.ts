@@ -296,7 +296,7 @@ async function bootstrap() {
         batch: 'Batch-2024-A',
         totalFee: 15000,
         admissionDate: new Date('2024-01-20').toISOString(),
-      });
+      }, userId);
 
       const admission2 = await coachingService.createAdmission({
         studentName: 'Karim Hossain',
@@ -307,7 +307,7 @@ async function bootstrap() {
         batch: 'Batch-2024-A',
         totalFee: 12000,
         admissionDate: new Date('2024-02-15').toISOString(),
-      });
+      }, userId);
 
       const admission3 = await coachingService.createAdmission({
         studentName: 'Tasnim Begum',
@@ -318,7 +318,7 @@ async function bootstrap() {
         batch: 'Batch-2024-B',
         totalFee: 10000,
         admissionDate: new Date('2024-03-01').toISOString(),
-      });
+      }, userId);
 
       console.log('✓ Created 3 coaching admissions\n');
 

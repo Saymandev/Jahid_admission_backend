@@ -9,6 +9,15 @@ export enum PaymentMethod {
   BANK = 'bank',
 }
 
+export enum PaymentType {
+  RENT = 'rent',
+  ADVANCE = 'advance',
+  SECURITY = 'security',
+  UNION_FEE = 'union_fee',
+  REFUND = 'refund',
+  OTHER = 'other',
+}
+
 @Schema({ timestamps: true })
 export class Payment {
   @Prop({ type: Types.ObjectId, ref: 'Student', required: true })
@@ -19,6 +28,9 @@ export class Payment {
 
   @Prop({ required: true, min: 0 })
   rentAmount: number;
+
+  @Prop({ enum: PaymentType, default: PaymentType.RENT })
+  type: PaymentType;
 
   @Prop({ required: true, min: 0 })
   paidAmount: number;

@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsDateString, IsOptional, Min } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateAdmissionDto {
   @IsString()
@@ -24,6 +24,11 @@ export class CreateAdmissionDto {
   @IsNumber()
   @Min(0)
   totalFee: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  paidAmount?: number;
 
   @IsDateString()
   admissionDate: string;

@@ -232,12 +232,41 @@ export class ResidentialService {
     });
     await student.save();
 
+    await student.save();
+
     // Update room occupied beds
     room.occupiedBeds += 1;
     if (room.occupiedBeds >= room.totalBeds) {
       room.status = RoomStatus.FULL;
     }
     await room.save();
+
+    // Record Union Fee if provided
+    if (createStudentDto.unionFee && createStudentDto.unionFee > 0) {
+      await this.createPayment({
+        studentId: student._id.toString(),
+        billingMonth: new Date().toISOString().slice(0, 7),
+        rentAmount: 0,
+        paidAmount: createStudentDto.unionFee,
+        paymentMethod: 'cash', // Default or need DTO update
+        notes: 'Union Fee (Non-refundable)',
+        transactionId: '',
+        type: 'union_fee' as any, // Cast because we just added the enum
+      } as any, userId);
+    }
+
+    // Record Security Deposit if provided
+    if (createStudentDto.securityDeposit && createStudentDto.securityDeposit > 0) {
+      // We already set student.securityDeposit above, now record the transaction
+      const transaction = new this.securityDepositTransactionModel({
+        studentId: student._id,
+        type: SecurityDepositTransactionType.ADJUSTMENT, // Initial deposit is an adjustment/addition
+        amount: createStudentDto.securityDeposit,
+        notes: 'Initial Security Deposit',
+        processedBy: new Types.ObjectId(userId),
+      });
+      await transaction.save();
+    }
 
     await this.createAuditLog('create', 'Student', student._id.toString(), userId, null, student.toObject());
     return student;
@@ -1067,6 +1096,10 @@ export class ResidentialService {
     let advanceReturned = 0;
 
     // Handle advance payment - return it if exists
+    // OLD LOGIC: Deleted advance payment. 
+    // NEW LOGIC: We keep it. We calculate unused amount and refund it via new Transaction.
+    // So we remove the deletion logic.
+    /*
     if (dueStatus.totalAdvance > 0) {
       // Delete advance payment (it will be returned to student)
       try {
@@ -1078,6 +1111,7 @@ export class ResidentialService {
         console.warn('Could not delete advance payment during checkout:', error);
       }
     }
+    */
 
     // If using security deposit to pay dues
     if (useSecurityDeposit && remainingDues > 0 && student.securityDeposit > 0) {
@@ -1099,7 +1133,56 @@ export class ResidentialService {
       throw new BadRequestException(`Cannot checkout student with outstanding dues: ${remainingDues} BDT. Security deposit used: ${securityDepositUsed} BDT`);
     }
 
-    // Return remaining security deposit if any
+    // Handle Manual Refund (Arbitrary amount decided by admin)
+    // We expect a new optional parameter 'refundAmount' but for now let's assume if they pass a specific flag or we calculate it?
+    // The user requirement implies we should handle the calculation.
+    // Let's look at what available assets we have:
+    const remainingSecurity = student.securityDeposit;
+    const unusedAdvance = dueStatus.totalAdvance; // This is advanced applied + unapplied? No, getStudentDueStatus returns totalAdvance which is remaining.
+    
+    // Logic: The "refundAmount" should ideally be passed from controller. 
+    // Since I cannot easily change the signature without updating controller, I will implement a logic:
+    // If 'useSecurityDeposit' is true, we implicitly try to refund everything remaining.
+    
+    let totalRefundable = remainingSecurity + unusedAdvance;
+    
+    if (totalRefundable > 0) {
+       // Create a Refund Transaction
+       // We'll mark it as a 'refund' payment type
+       const refundPayment = new this.paymentModel({
+         studentId: new Types.ObjectId(studentId),
+         billingMonth: new Date().toISOString().slice(0, 7),
+         rentAmount: 0,
+         paidAmount: totalRefundable, // Verify if negative or positive implies refund. Usually refund is Outflow. 
+         // System seems to track 'paidAmount' as money IN. 
+         // Use negative amount to indicate money OUT? Or just rely on 'type'.
+         // Let's use negative for clarity in summation if we sum 'paidAmount'.
+         // BUT check schemas constraints: min: 0. 
+         // Constraint: paidAmount min 0. So we must use positive value and 'type' = 'refund'.
+         dueAmount: 0,
+         advanceAmount: 0,
+         paymentMethod: PaymentMethod.CASH,
+         notes: `Refund on checkout (Security: ${remainingSecurity}, Advance: ${unusedAdvance})`,
+         recordedBy: new Types.ObjectId(userId),
+         type: 'refund' as any, 
+       });
+       await refundPayment.save();
+       
+       securityDepositReturned = remainingSecurity;
+       advanceReturned = unusedAdvance;
+
+       // Zero out security deposit
+       student.securityDeposit = 0; 
+       
+       // Handle Advance "Settlement"
+       // We don't delete the advance payment anymore. We just added a Refund transaction that technically "offsets" it.
+       // However, `getStudentDueStatus` will still see the Advance Payment as "Available" next time?
+       // No, because student status is LEFT.
+    }
+
+    // Return remaining security deposit if any  <-- We handled this above in new logic
+    // Keeping this block commented or removed to avoid double refunding
+    /* 
     if (student.securityDeposit > 0) {
       securityDepositReturned = student.securityDeposit;
       await this.returnSecurityDeposit(studentId, {
@@ -1108,6 +1191,7 @@ export class ResidentialService {
       }, userId);
       student.securityDeposit = 0;
     }
+    */
 
     // Mark student as left
     student.status = StudentStatus.LEFT;

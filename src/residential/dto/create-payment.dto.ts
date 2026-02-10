@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsEnum, IsOptional, Min, IsMongoId, Matches, IsBoolean } from 'class-validator';
+import { IsBoolean, IsEnum, IsMongoId, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { PaymentType } from '../schemas/payment.schema';
 
 export class CreatePaymentDto {
   @IsMongoId()
@@ -27,4 +28,8 @@ export class CreatePaymentDto {
   @IsBoolean()
   @IsOptional()
   isAdvance?: boolean; // If true, this is an advance payment for future months
+
+  @IsEnum(PaymentType)
+  @IsOptional()
+  type?: PaymentType;
 }

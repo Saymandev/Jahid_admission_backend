@@ -1,12 +1,12 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Query } from '@nestjs/common';
-import { CoachingService } from './coaching.service';
-import { CreateAdmissionDto } from './dto/create-admission.dto';
-import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
+import { CoachingService } from './coaching.service';
+import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
+import { CreateAdmissionDto } from './dto/create-admission.dto';
 import { AdmissionStatus } from './schemas/admission.schema';
 
 @Controller('coaching')
@@ -16,8 +16,8 @@ export class CoachingController {
 
   @Post('admissions')
   @Roles(UserRole.ADMIN)
-  createAdmission(@Body() createAdmissionDto: CreateAdmissionDto) {
-    return this.coachingService.createAdmission(createAdmissionDto);
+  createAdmission(@Body() createAdmissionDto: CreateAdmissionDto, @CurrentUser() user: any) {
+    return this.coachingService.createAdmission(createAdmissionDto, user.sub);
   }
 
   @Get('admissions')
@@ -27,11 +27,15 @@ export class CoachingController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('batch') batch?: string,
+    @Query('course') course?: string,
   ) {
     const pagination = {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       search: search,
+      batch,
+      course,
     };
     return this.coachingService.findAllAdmissions(status, includeDeleted === 'true', pagination);
   }

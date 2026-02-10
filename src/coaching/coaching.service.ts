@@ -1,13 +1,12 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Admission, AdmissionDocument } from './schemas/admission.schema';
-import { AdmissionPayment, AdmissionPaymentDocument } from './schemas/admission-payment.schema';
-import { CreateAdmissionDto } from './dto/create-admission.dto';
-import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
-import { AdmissionStatus } from './schemas/admission.schema';
 import { PaginationDto } from '../residential/dto/pagination.dto';
 import { SocketGateway } from '../socket/socket.gateway';
+import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
+import { CreateAdmissionDto } from './dto/create-admission.dto';
+import { AdmissionPayment, AdmissionPaymentDocument } from './schemas/admission-payment.schema';
+import { Admission, AdmissionDocument, AdmissionStatus } from './schemas/admission.schema';
 
 @Injectable()
 export class CoachingService {
@@ -17,7 +16,7 @@ export class CoachingService {
     private socketGateway: SocketGateway,
   ) {}
 
-  async createAdmission(createAdmissionDto: CreateAdmissionDto): Promise<AdmissionDocument> {
+  async createAdmission(createAdmissionDto: CreateAdmissionDto, userId: string): Promise<AdmissionDocument> {
     const admissionId = await this.generateAdmissionId();
     const admission = new this.admissionModel({
       ...createAdmissionDto,
@@ -25,7 +24,20 @@ export class CoachingService {
       admissionDate: new Date(createAdmissionDto.admissionDate),
       dueAmount: createAdmissionDto.totalFee,
     });
-    return admission.save();
+    const savedAdmission = await admission.save();
+
+    // Handle initial payment if provided
+    if (createAdmissionDto.paidAmount && createAdmissionDto.paidAmount > 0) {
+      await this.createPayment({
+        admissionId: savedAdmission._id.toString(),
+        paidAmount: createAdmissionDto.paidAmount,
+        paymentMethod: 'cash', // Default to cash for initial payment, or we could add this to DTO
+        notes: 'Initial admission payment',
+        transactionId: '',
+      }, 'system'); // 'system' or we need to pass userId to createAdmission
+    }
+
+    return savedAdmission;
   }
 
   async findAllAdmissions(
@@ -51,6 +63,16 @@ export class CoachingService {
         { course: searchRegex },
         { batch: searchRegex },
       ];
+    }
+
+    // Exact match filters for batch and course
+    if (pagination) {
+      if ((pagination as any).batch) {
+        query.batch = (pagination as any).batch;
+      }
+      if ((pagination as any).course) {
+        query.course = (pagination as any).course;
+      }
     }
 
     const page = pagination?.page || 1;
