@@ -268,6 +268,18 @@ export class ResidentialService {
         processedBy: new Types.ObjectId(userId),
       });
       await transaction.save();
+
+      // ALSO Record as a Payment for the main ledger
+      await this.createPayment({
+        studentId: student._id.toString(),
+        billingMonth: new Date().toISOString().slice(0, 7),
+        rentAmount: 0,
+        paidAmount: createStudentDto.securityDeposit,
+        paymentMethod: 'cash', // Default
+        notes: 'Initial Security Deposit',
+        transactionId: '',
+        type: 'security' as any,
+      } as any, userId);
     }
 
     await this.createAuditLog('create', 'Student', student._id.toString(), userId, null, student.toObject());
@@ -842,6 +854,21 @@ export class ResidentialService {
         });
         await payment.save();
       }
+    } else if (createPaymentDto.type === 'union_fee' || createPaymentDto.type === 'security' || createPaymentDto.type === 'other') {
+       // Handle one-time fees (Union Fee, etc.)
+       payment = new this.paymentModel({
+          ...createPaymentDto,
+          studentId: new Types.ObjectId(createPaymentDto.studentId),
+          billingMonth: createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7),
+          rentAmount: 0, 
+          paidAmount: createPaymentDto.paidAmount,
+          dueAmount: 0,
+          advanceAmount: 0,
+          paymentMethod: createPaymentDto.paymentMethod || 'cash',
+          recordedBy: new Types.ObjectId(userId),
+          type: createPaymentDto.type,
+        });
+        await payment.save();
     } else {
       // Regular payment for a specific month
       const billingMonth = createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7);
