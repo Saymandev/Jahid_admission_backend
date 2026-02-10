@@ -66,6 +66,10 @@ PaymentSchema.index(
   { studentId: 1, billingMonth: 1 }, 
   { 
     unique: true, 
-    partialFilterExpression: { isDeleted: false, billingMonth: { $ne: 'ADVANCE' } } 
+    partialFilterExpression: { 
+      isDeleted: false, 
+      billingMonth: { $ne: 'ADVANCE' },
+      type: PaymentType.RENT // Only enforce uniqueness for RENT payments. Other fees can be multiple per month.
+    } 
   }
 );
