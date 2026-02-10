@@ -815,6 +815,7 @@ export class ResidentialService {
 
   // ========== PAYMENT METHODS ==========
   async createPayment(createPaymentDto: CreatePaymentDto, userId: string): Promise<PaymentDocument> {
+    console.log('createPayment called with:', JSON.stringify(createPaymentDto));
     const student = await this.findStudentById(createPaymentDto.studentId);
     let payment: PaymentDocument;
     
