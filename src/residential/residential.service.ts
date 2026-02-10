@@ -898,6 +898,7 @@ export class ResidentialService {
         studentId: new Types.ObjectId(createPaymentDto.studentId),
         billingMonth: billingMonth,
         isDeleted: false,
+        $or: [{ type: 'rent' }, { type: { $exists: false } }, { type: null }]
       });
 
       const rentAmount = student.monthlyRent;
