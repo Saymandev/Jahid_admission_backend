@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { CoachingService } from '../coaching/coaching.service';
 import { SocketGateway } from '../socket/socket.gateway';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -28,6 +29,7 @@ export class ResidentialService {
     @InjectModel(SecurityDepositTransaction.name) private securityDepositTransactionModel: Model<SecurityDepositTransactionDocument>,
     @InjectModel(AdvanceApplication.name) private advanceApplicationModel: Model<AdvanceApplicationDocument>,
     @Inject(forwardRef(() => SocketGateway)) private socketGateway: SocketGateway,
+    private coachingService: CoachingService,
   ) {}
 
   // ========== ROOM METHODS ==========
@@ -1265,25 +1267,29 @@ export class ResidentialService {
       isDeleted: false,
     });
 
-    const allPayments = await this.paymentModel.find({ isDeleted: false }).exec();
     const allStudents = await this.studentModel.find({ isDeleted: false }).exec();
 
-    let totalDue = 0;
-    let twoPlusMonthsDueCount = 0;
+    let residentialDue = 0;
+    // let twoPlusMonthsDueCount = 0; // Removed per requirement
 
     for (const student of allStudents) {
       const dueStatus = await this.getStudentDueStatus(student._id.toString());
-      totalDue += dueStatus.totalDue;
-      if (dueStatus.consecutiveDueMonths >= 2) {
-        twoPlusMonthsDueCount++;
-      }
+      residentialDue += dueStatus.totalDue;
+      // if (dueStatus.consecutiveDueMonths >= 2) {
+      //   twoPlusMonthsDueCount++;
+      // }
     }
+
+    // Fetch coaching stats
+    const coachingStats = await this.coachingService.getAdmissionStats();
+    const coachingDue = coachingStats.totalDue || 0;
 
     return {
       totalRooms,
       activeStudents,
-      totalDue,
-      twoPlusMonthsDueStudents: twoPlusMonthsDueCount,
+      residentialDue,
+      coachingDue,
+      // twoPlusMonthsDueStudents: twoPlusMonthsDueCount, // Removed
     };
   }
 

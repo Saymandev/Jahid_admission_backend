@@ -182,16 +182,32 @@ export class CoachingService {
       .exec();
   }
 
-  async getAdmissionStats(): Promise<any> {
-    const totalAdmissions = await this.admissionModel.countDocuments({ isDeleted: false });
-    const pendingAdmissions = await this.admissionModel.countDocuments({
-      status: AdmissionStatus.PENDING,
-      isDeleted: false,
-    });
+  async getAdmissionStats(filters: { status?: AdmissionStatus; batch?: string; course?: string } = {}): Promise<any> {
+    const query: any = { isDeleted: false };
     
-    const allAdmissions = await this.admissionModel.find({ isDeleted: false }).exec();
-    const totalDue = allAdmissions.reduce((sum, a) => sum + a.dueAmount, 0);
-    const totalCollected = allAdmissions.reduce((sum, a) => sum + a.paidAmount, 0);
+    if (filters.status) {
+      query.status = filters.status;
+    }
+    if (filters.batch && filters.batch !== 'all') {
+      query.batch = filters.batch;
+    }
+    if (filters.course && filters.course !== 'all') {
+      query.course = filters.course;
+    }
+
+    const admissions = await this.admissionModel.find(query).exec();
+
+    const totalAdmissions = admissions.length;
+    // For pending count, if status filter is applied, it will just match total if status=pending, or 0 if status!=pending
+    // But usually stats are "summary based on current view".
+    // If the user filters by "Pending", the Total Admissions should be the count of Pending.
+    // The "Pending" card might be redundant if filtering by Pending, but let's keep it consistent.
+    // Actually, usually dashboard stats show "Total of current view", "Pending of current view" etc.
+    
+    const pendingAdmissions = admissions.filter(a => a.status === AdmissionStatus.PENDING).length;
+    
+    const totalDue = admissions.reduce((sum, a) => sum + (a.dueAmount || 0), 0);
+    const totalCollected = admissions.reduce((sum, a) => sum + (a.paidAmount || 0), 0);
 
     return {
       totalAdmissions,

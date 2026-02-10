@@ -73,7 +73,11 @@ export class CoachingController {
   }
 
   @Get('stats')
-  getAdmissionStats() {
-    return this.coachingService.getAdmissionStats();
+  getAdmissionStats(
+    @Query('status') status?: AdmissionStatus,
+    @Query('batch') batch?: string,
+    @Query('course') course?: string,
+  ) {
+    return this.coachingService.getAdmissionStats({ status, batch, course });
   }
 }
