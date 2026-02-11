@@ -1162,7 +1162,8 @@ export class ResidentialService {
       .exec();
   }
 
-  async checkoutStudent(studentId: string, userId: string, useSecurityDeposit: boolean = false): Promise<any> {
+  async checkoutStudent(studentId: string, userId: string, useSecurityDeposit: boolean = false, refundAmount?: number): Promise<any> {
+
     const student = await this.findStudentById(studentId);
     if (student.status === StudentStatus.LEFT) {
       throw new BadRequestException('Student has already left');
@@ -1223,7 +1224,7 @@ export class ResidentialService {
     // Since I cannot easily change the signature without updating controller, I will implement a logic:
     // If 'useSecurityDeposit' is true, we implicitly try to refund everything remaining.
 
-    let totalRefundable = remainingSecurity + unusedAdvance;
+    let totalRefundable = refundAmount !== undefined ? refundAmount : (remainingSecurity + unusedAdvance);
 
     if (totalRefundable > 0) {
       // Create a Refund Transaction
@@ -1232,7 +1233,7 @@ export class ResidentialService {
         studentId: new Types.ObjectId(studentId),
         billingMonth: new Date().toISOString().slice(0, 7),
         rentAmount: 0,
-        paidAmount: totalRefundable, // Verify if negative or positive implies refund. Usually refund is Outflow. 
+        paidAmount: totalRefundable,
         // System seems to track 'paidAmount' as money IN. 
         // Use negative amount to indicate money OUT? Or just rely on 'type'.
         // Let's use negative for clarity in summation if we sum 'paidAmount'.

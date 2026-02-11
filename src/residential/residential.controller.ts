@@ -29,7 +29,7 @@ import { StudentStatus } from './schemas/student.schema';
 @Controller('residential')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ResidentialController {
-  constructor(private readonly residentialService: ResidentialService) {}
+  constructor(private readonly residentialService: ResidentialService) { }
 
   // ========== ROOM ENDPOINTS ==========
   @Post('rooms')
@@ -153,11 +153,12 @@ export class ResidentialController {
   @Roles(UserRole.ADMIN)
   checkoutStudent(
     @Param('id') id: string,
-    @Body() body: { useSecurityDeposit?: boolean },
+    @Body() body: { useSecurityDeposit?: boolean; refundAmount?: number },
     @CurrentUser() user: any,
   ) {
-    return this.residentialService.checkoutStudent(id, user.sub, body.useSecurityDeposit || false);
+    return this.residentialService.checkoutStudent(id, user.sub, body.useSecurityDeposit || false, body.refundAmount);
   }
+
 
   @Post('students/:id/reactivate')
   @Roles(UserRole.ADMIN)
