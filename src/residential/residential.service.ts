@@ -1297,12 +1297,14 @@ export class ResidentialService {
     const statement = {
       student: student.toObject(),
       payments: dueStatus.payments,
-      totalPaid: dueStatus.payments.reduce((sum, p) => sum + p.paidAmount, 0),
+      totalPaid: dueStatus.payments.reduce((sum, p) => sum + (p.paidAmount || 0), 0),
       securityDepositUsed,
-      securityDepositReturned,
+      securityDeposit: securityDepositReturned,
       advanceReturned,
+      totalRefunded: securityDepositReturned + advanceReturned,
       checkoutDate: new Date(),
     };
+
 
     await this.createAuditLog('checkout', 'Student', student._id.toString(), userId, null, statement);
 
@@ -1371,8 +1373,12 @@ export class ResidentialService {
 
       // Calculate collection (total paid amount for this month)
       const collection = monthPayments.reduce((sum, payment) => {
+        if (payment.type === 'refund') {
+          return sum - (payment.paidAmount || 0);
+        }
         return sum + (payment.paidAmount || 0);
       }, 0);
+
 
       // Calculate due (total due amount for this month)
       const due = monthPayments.reduce((sum, payment) => {
