@@ -654,13 +654,14 @@ export class ResidentialService {
     const currentMonthString = new Date().toISOString().slice(0, 7);
     const months = this.generateMonthsSinceJoining(student.joiningDate, currentMonthString);
 
-    const paymentMap = new Map();
-    // Filter out non-rent payments so they don't interfere with rent due calculations
-    // Use 'rent' string check or default checks
+    const paymentMap = new Map<string, { totalPaid: number, records: any[] }>();
+    // Group all payments by billingMonth to handle multiple transactions per month
     payments.forEach(p => {
-      // Include RENT payments and explicit ADVANCE payments (which hold the advance balance)
       if (!p.type || p.type === 'rent' || p.type === 'advance' || p.billingMonth === 'ADVANCE') {
-        paymentMap.set(p.billingMonth, p);
+        const existing = paymentMap.get(p.billingMonth) || { totalPaid: 0, records: [] };
+        existing.totalPaid += p.paidAmount;
+        existing.records.push(p);
+        paymentMap.set(p.billingMonth, existing);
       }
     });
 
@@ -687,7 +688,7 @@ export class ResidentialService {
           paymentMethod: PaymentMethod.CASH,
         });
         await autoPayment.save();
-        paymentMap.set(month, autoPayment);
+        paymentMap.set(month, { totalPaid: 0, records: [autoPayment] });
 
 
         // Emit notification for auto-created due
@@ -710,25 +711,25 @@ export class ResidentialService {
     // Get total advance amount from:
     // 1. Explicit advance payments (billingMonth = 'ADVANCE')
     // 2. Overpayment advance (advanceAmount from regular payments)
-    const advancePayment = paymentMap.get('ADVANCE');
-    let totalAdvance = advancePayment?.advanceAmount || 0;
+    const advanceMapData = paymentMap.get('ADVANCE');
+    let totalAdvance = advanceMapData?.totalPaid || 0;
 
     // Add advance from overpayments in regular payments
+    // Note: We sum advanceAmount from individual records
     payments.forEach((p) => {
       if (p.billingMonth !== 'ADVANCE' && p.advanceAmount > 0) {
         totalAdvance += p.advanceAmount;
       }
     });
 
-    const advancePaymentId = advancePayment?._id;
+    const advancePaymentId = advanceMapData?.records?.[0]?._id;
 
     for (const month of months) {
-      const payment = paymentMap.get(month);
+      const monthData = paymentMap.get(month);
       const rentAmount = student.monthlyRent;
-      let paidAmount = payment?.paidAmount || 0;
-      let dueAmount = payment ? Math.max(0, rentAmount - paidAmount) : rentAmount;
-      let monthAdvance = payment?.advanceAmount || 0;
-      const dueAmountBefore = dueAmount;
+      let paidAmount = monthData?.totalPaid || 0;
+      let dueAmount = Math.max(0, rentAmount - paidAmount);
+      let monthAdvance = 0; // Will be calculated below
 
       // Apply advance payment to this month's due if there's any
       if (totalAdvance > 0 && dueAmount > 0) {
@@ -786,11 +787,12 @@ export class ResidentialService {
         dueAmount,
         advanceAmount: monthAdvance,
         advanceApplied: advanceApplication ? advanceApplication.advanceAmountApplied : 0,
-        paymentMethod: payment?.paymentMethod,
-        paymentDate: payment?.createdAt,
+        // Return individual transaction records for this month
+        records: monthData?.records || [],
         status: dueAmount === 0 ? 'paid' : dueAmount < rentAmount ? 'partial' : 'unpaid',
       });
     }
+
 
     // Calculate remaining advance after all applications
     const remainingAdvance = totalAdvance;
@@ -934,48 +936,41 @@ export class ResidentialService {
         );
       }
 
-      // Check if payment for this month already exists
-      const existingPayment = await this.paymentModel.findOne({
-        studentId: new Types.ObjectId(createPaymentDto.studentId),
-        billingMonth: billingMonth,
-        isDeleted: false,
-        $or: [{ type: 'rent' }, { type: { $exists: false } }, { type: null }]
-      });
+      // Regular payment for a specific month
+      const billingMonth = createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7);
+
+      // Validate that billing month is not before student's joining date
+      const joiningDate = new Date(student.joiningDate);
+      const joiningMonth = `${joiningDate.getFullYear()}-${String(joiningDate.getMonth() + 1).padStart(2, '0')}`;
+      const billingMonthDate = new Date(billingMonth + '-01');
+      const joiningMonthDate = new Date(joiningDate.getFullYear(), joiningDate.getMonth(), 1);
+
+      if (billingMonthDate < joiningMonthDate) {
+        throw new BadRequestException(
+          `Cannot create payment for ${billingMonth}. Student joined on ${joiningMonth}. Payments can only be made for months from the joining date onwards.`
+        );
+      }
 
       const rentAmount = student.monthlyRent;
+      // We always create a new payment record now to preserve transaction history
+      // Individual record due/advance is less important because getStudentDueStatus aggregates them
+      // But for consistency we'll set them based on THIS payment.
+      const dueAmount = Math.max(0, rentAmount - createPaymentDto.paidAmount);
+      const advanceAmount = Math.max(0, createPaymentDto.paidAmount - rentAmount);
 
-      if (existingPayment) {
-        // Update existing payment
-        const totalPaid = existingPayment.paidAmount + createPaymentDto.paidAmount;
-        const dueAmount = Math.max(0, rentAmount - totalPaid);
-        const advanceAmount = Math.max(0, totalPaid - rentAmount);
+      payment = new this.paymentModel({
+        ...createPaymentDto,
+        studentId: new Types.ObjectId(createPaymentDto.studentId),
+        billingMonth: billingMonth,
+        rentAmount,
+        paidAmount: createPaymentDto.paidAmount,
+        dueAmount,
+        advanceAmount,
+        recordedBy: new Types.ObjectId(userId),
+        type: 'rent',
+      });
+      await payment.save();
 
-        existingPayment.paidAmount = totalPaid;
-        existingPayment.dueAmount = dueAmount;
-        existingPayment.advanceAmount = advanceAmount;
-        existingPayment.paymentMethod = createPaymentDto.paymentMethod as any;
-        existingPayment.transactionId = createPaymentDto.transactionId;
-        existingPayment.notes = createPaymentDto.notes;
-        existingPayment.recordedBy = new Types.ObjectId(userId);
-        await existingPayment.save();
-        payment = existingPayment;
-      } else {
-        // Create new payment
-        const dueAmount = Math.max(0, rentAmount - createPaymentDto.paidAmount);
-        const advanceAmount = Math.max(0, createPaymentDto.paidAmount - rentAmount);
-
-        payment = new this.paymentModel({
-          ...createPaymentDto,
-          studentId: new Types.ObjectId(createPaymentDto.studentId),
-          billingMonth: billingMonth,
-          rentAmount,
-          paidAmount: createPaymentDto.paidAmount,
-          dueAmount,
-          advanceAmount,
-          recordedBy: new Types.ObjectId(userId),
-        });
-        await payment.save();
-      }
     }
 
     await this.createAuditLog('payment', 'Payment', payment._id.toString(), userId, null, payment.toObject());

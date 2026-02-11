@@ -63,13 +63,13 @@ export class Payment {
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
 // Allow multiple advance payments (billingMonth = 'ADVANCE') but unique for regular months
 PaymentSchema.index(
-  { studentId: 1, billingMonth: 1 }, 
-  { 
-    unique: true, 
-    partialFilterExpression: { 
-      isDeleted: false, 
+  { studentId: 1, billingMonth: 1 },
+  {
+    partialFilterExpression: {
+      isDeleted: false,
       billingMonth: { $ne: 'ADVANCE' },
-      type: PaymentType.RENT // Only enforce uniqueness for RENT payments. Other fees can be multiple per month.
-    } 
+      type: PaymentType.RENT
+    }
   }
 );
+
