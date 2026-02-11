@@ -11,11 +11,13 @@ import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 
 @WebSocketGateway({
+  path: '/api/socket.io',
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   },
 })
+
 export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -24,7 +26,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private jwtService: JwtService,
     private configService: ConfigService,
     private usersService: UsersService,
-  ) {}
+  ) { }
 
   async handleConnection(client: Socket) {
     try {
