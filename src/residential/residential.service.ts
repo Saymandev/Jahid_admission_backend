@@ -936,22 +936,9 @@ export class ResidentialService {
         );
       }
 
-      // Regular payment for a specific month
-      const billingMonth = createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7);
-
-      // Validate that billing month is not before student's joining date
-      const joiningDate = new Date(student.joiningDate);
-      const joiningMonth = `${joiningDate.getFullYear()}-${String(joiningDate.getMonth() + 1).padStart(2, '0')}`;
-      const billingMonthDate = new Date(billingMonth + '-01');
-      const joiningMonthDate = new Date(joiningDate.getFullYear(), joiningDate.getMonth(), 1);
-
-      if (billingMonthDate < joiningMonthDate) {
-        throw new BadRequestException(
-          `Cannot create payment for ${billingMonth}. Student joined on ${joiningMonth}. Payments can only be made for months from the joining date onwards.`
-        );
-      }
 
       const rentAmount = student.monthlyRent;
+
       // We always create a new payment record now to preserve transaction history
       // Individual record due/advance is less important because getStudentDueStatus aggregates them
       // But for consistency we'll set them based on THIS payment.
