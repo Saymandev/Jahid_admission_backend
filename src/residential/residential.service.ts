@@ -30,7 +30,7 @@ export class ResidentialService {
     @InjectModel(AdvanceApplication.name) private advanceApplicationModel: Model<AdvanceApplicationDocument>,
     @Inject(forwardRef(() => SocketGateway)) private socketGateway: SocketGateway,
     private coachingService: CoachingService,
-  ) {}
+  ) { }
 
   // ========== ROOM METHODS ==========
   async createRoom(createRoomDto: CreateRoomDto, userId: string): Promise<RoomDocument> {
@@ -42,7 +42,7 @@ export class ResidentialService {
     }));
 
     // Calculate monthlyRentPerBed as average if not provided
-    const monthlyRentPerBed = createRoomDto.monthlyRentPerBed || 
+    const monthlyRentPerBed = createRoomDto.monthlyRentPerBed ||
       (beds.length > 0 ? beds.reduce((sum, bed) => sum + bed.price, 0) / beds.length : 0);
 
     const room = new this.roomModel({
@@ -86,7 +86,7 @@ export class ResidentialService {
       this.roomModel.find(query).sort({ name: 1 }).skip(skip).limit(limit).exec(),
       this.roomModel.countDocuments(query).exec(),
     ]);
-    
+
     // Auto-generate beds for rooms that don't have beds but have totalBeds
     for (const room of rooms) {
       if ((!room.beds || room.beds.length === 0) && room.totalBeds > 0) {
@@ -96,25 +96,25 @@ export class ResidentialService {
           price: room.monthlyRentPerBed,
           isOccupied: false,
         }));
-        
+
         // Mark beds as occupied based on existing students
         const students = await this.studentModel.find({
           roomId: room._id,
           status: StudentStatus.ACTIVE,
           isDeleted: false,
         }).exec();
-        
+
         for (const student of students) {
           if (student.bedNumber && student.bedNumber <= room.beds.length) {
             room.beds[student.bedNumber - 1].isOccupied = true;
           }
         }
-        
+
         // Save the updated room
         await room.save();
       }
     }
-    
+
     return {
       data: rooms,
       total,
@@ -181,7 +181,7 @@ export class ResidentialService {
   // ========== STUDENT METHODS ==========
   async createStudent(createStudentDto: CreateStudentDto, userId: string): Promise<StudentDocument> {
     const room = await this.findRoomById(createStudentDto.roomId);
-    
+
     let bedNumber = createStudentDto.bedNumber;
     let bedPrice = room.monthlyRentPerBed;
 
@@ -243,7 +243,29 @@ export class ResidentialService {
     }
     await room.save();
 
+    // Record Initial Rent Payment if provided
+    if (createStudentDto.initialRentPaid && createStudentDto.initialRentPaid > 0) {
+      console.log('Creating Initial Rent payment:', createStudentDto.initialRentPaid);
+      try {
+        await this.createPayment({
+          studentId: student._id.toString(),
+          billingMonth: new Date().toISOString().slice(0, 7),
+          rentAmount: student.monthlyRent,
+          paidAmount: createStudentDto.initialRentPaid,
+          paymentMethod: 'cash',
+          notes: 'Initial Rent Payment during Admission',
+          transactionId: '',
+          type: 'rent',
+        } as any, userId);
+        console.log('Initial Rent payment created successfully');
+      } catch (error) {
+        console.error('Error creating Initial Rent payment:', error);
+        throw error;
+      }
+    }
+
     // Record Union Fee if provided
+
     if (createStudentDto.unionFee && createStudentDto.unionFee > 0) {
       console.log('Creating Union Fee payment:', createStudentDto.unionFee);
       try {
@@ -376,7 +398,7 @@ export class ResidentialService {
       return null;
     }
     const query: any = { isDeleted: false };
-    
+
     // If phone is provided, prioritize exact phone match
     if (phone && phone.trim().length >= 3) {
       query.phone = phone.trim();
@@ -395,7 +417,7 @@ export class ResidentialService {
         query.name = { $regex: new RegExp(name.trim(), 'i') };
       }
     }
-    
+
     // Find the most recent student (by creation date) matching the criteria
     return this.studentModel
       .findOne(query)
@@ -425,7 +447,7 @@ export class ResidentialService {
 
     const oldData = student.toObject();
     const room = await this.findRoomById(reactivateDto.roomId);
-    
+
     let bedNumber = reactivateDto.bedNumber;
     let bedPrice = room.monthlyRentPerBed;
 
@@ -508,10 +530,10 @@ export class ResidentialService {
     await room.save();
 
     await this.createAuditLog('reactivate', 'Student', student._id.toString(), userId, oldData, student.toObject());
-    
+
     // Emit real-time updates
     this.socketGateway.emitDashboardUpdate(await this.getDashboardStats());
-    
+
     return student;
   }
 
@@ -529,7 +551,7 @@ export class ResidentialService {
     userId?: string,
   ): Promise<{ data: PaymentDocument[]; total: number; page: number; limit: number; totalPages: number }> {
     const query: any = { isDeleted: false };
-    
+
     // If userId is provided, filter by that user (for staff users)
     if (userId) {
       query.recordedBy = new Types.ObjectId(userId);
@@ -628,10 +650,10 @@ export class ResidentialService {
   async getStudentDueStatus(studentId: string): Promise<any> {
     const student = await this.findStudentById(studentId);
     const payments = await this.getStudentPayments(studentId);
-    
+
     const currentMonthString = new Date().toISOString().slice(0, 7);
     const months = this.generateMonthsSinceJoining(student.joiningDate, currentMonthString);
-    
+
     const paymentMap = new Map();
     // Filter out non-rent payments so they don't interfere with rent due calculations
     // Use 'rent' string check or default checks
@@ -648,12 +670,12 @@ export class ResidentialService {
     const currentYear = today.getFullYear();
     const currentMonthIndex = today.getMonth(); // 0-indexed (0 = January)
     const currentMonthDate = new Date(currentYear, currentMonthIndex, 1);
-    
+
     for (const month of months) {
       const monthDate = new Date(month + '-01');
-      // Only auto-create for past months (months that have completely passed)
-      // Compare to the first day of current month to ensure we don't create for current month
-      if (monthDate < currentMonthDate && !paymentMap.has(month)) {
+      // Fix: Also include the current month if it is the joining month and no payment has been made
+      // This ensures that a student joining today immediately shows a due for the current month.
+      if ((monthDate < currentMonthDate || month === currentMonthString) && !paymentMap.has(month)) {
         // Create a payment record with 0 paid amount to mark it as due
         const autoPayment = new this.paymentModel({
           studentId: new Types.ObjectId(studentId),
@@ -663,11 +685,11 @@ export class ResidentialService {
           dueAmount: student.monthlyRent,
           advanceAmount: 0,
           paymentMethod: PaymentMethod.CASH,
-          // recordedBy is optional, so we can leave it undefined for auto-generated dues
         });
         await autoPayment.save();
         paymentMap.set(month, autoPayment);
-        
+
+
         // Emit notification for auto-created due
         this.socketGateway.emitNotification({
           id: `due-${studentId}-${month}`,
@@ -690,14 +712,14 @@ export class ResidentialService {
     // 2. Overpayment advance (advanceAmount from regular payments)
     const advancePayment = paymentMap.get('ADVANCE');
     let totalAdvance = advancePayment?.advanceAmount || 0;
-    
+
     // Add advance from overpayments in regular payments
     payments.forEach((p) => {
       if (p.billingMonth !== 'ADVANCE' && p.advanceAmount > 0) {
         totalAdvance += p.advanceAmount;
       }
     });
-    
+
     const advancePaymentId = advancePayment?._id;
 
     for (const month of months) {
@@ -785,7 +807,7 @@ export class ResidentialService {
 
   async deleteAdvancePayment(studentId: string, userId: string): Promise<void> {
     const student = await this.findStudentById(studentId);
-    
+
     // Find advance payment
     const advancePayment = await this.paymentModel.findOne({
       studentId: new Types.ObjectId(studentId),
@@ -823,76 +845,95 @@ export class ResidentialService {
     console.log('createPayment called with:', JSON.stringify(createPaymentDto));
     const student = await this.findStudentById(createPaymentDto.studentId);
     let payment: PaymentDocument;
-    
+
     // Handle advance payments (standalone advance for future months)
     if (createPaymentDto.isAdvance) {
-        console.log('Processing as ADVANCE payment');
-        // Check if advance payment already exists
-        const existingAdvance = await this.paymentModel.findOne({
+      console.log('Processing as ADVANCE payment');
+      // Check if advance payment already exists
+      const existingAdvance = await this.paymentModel.findOne({
+        studentId: new Types.ObjectId(createPaymentDto.studentId),
+        billingMonth: 'ADVANCE',
+        isDeleted: false,
+      });
+
+      if (existingAdvance) {
+        // Add to existing advance
+        existingAdvance.paidAmount += createPaymentDto.paidAmount;
+        existingAdvance.advanceAmount += createPaymentDto.paidAmount;
+        existingAdvance.paymentMethod = createPaymentDto.paymentMethod as any;
+        existingAdvance.transactionId = createPaymentDto.transactionId;
+        existingAdvance.notes = createPaymentDto.notes || existingAdvance.notes;
+        existingAdvance.recordedBy = new Types.ObjectId(userId);
+        await existingAdvance.save();
+        payment = existingAdvance;
+      } else {
+        // Create new advance payment record
+        payment = new this.paymentModel({
           studentId: new Types.ObjectId(createPaymentDto.studentId),
           billingMonth: 'ADVANCE',
-          isDeleted: false,
-        });
-  
-        if (existingAdvance) {
-          // Add to existing advance
-          existingAdvance.paidAmount += createPaymentDto.paidAmount;
-          existingAdvance.advanceAmount += createPaymentDto.paidAmount;
-          existingAdvance.paymentMethod = createPaymentDto.paymentMethod as any;
-          existingAdvance.transactionId = createPaymentDto.transactionId;
-          existingAdvance.notes = createPaymentDto.notes || existingAdvance.notes;
-          existingAdvance.recordedBy = new Types.ObjectId(userId);
-          await existingAdvance.save();
-          payment = existingAdvance;
-        } else {
-          // Create new advance payment record
-          payment = new this.paymentModel({
-            studentId: new Types.ObjectId(createPaymentDto.studentId),
-            billingMonth: 'ADVANCE',
-            rentAmount: 0, // No rent for advance payments
-            paidAmount: createPaymentDto.paidAmount,
-            dueAmount: 0,
-            advanceAmount: createPaymentDto.paidAmount,
-            paymentMethod: createPaymentDto.paymentMethod as any,
-            transactionId: createPaymentDto.transactionId,
-            notes: createPaymentDto.notes,
-            recordedBy: new Types.ObjectId(userId),
-            type: 'advance' as any,
-          });
-          await payment.save();
-        }
-    } else if (createPaymentDto.type === 'union_fee' || createPaymentDto.type === 'security' || createPaymentDto.type === 'other') {
-       console.log(`Processing as SPECIAL payment: ${createPaymentDto.type}`);
-       // Handle one-time fees (Union Fee, etc.)
-       payment = new this.paymentModel({
-          ...createPaymentDto,
-          studentId: new Types.ObjectId(createPaymentDto.studentId),
-          billingMonth: createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7),
-          rentAmount: 0, 
+          rentAmount: 0, // No rent for advance payments
           paidAmount: createPaymentDto.paidAmount,
           dueAmount: 0,
-          advanceAmount: 0,
-          paymentMethod: createPaymentDto.paymentMethod || 'cash',
+          advanceAmount: createPaymentDto.paidAmount,
+          paymentMethod: createPaymentDto.paymentMethod as any,
+          transactionId: createPaymentDto.transactionId,
+          notes: createPaymentDto.notes,
           recordedBy: new Types.ObjectId(userId),
-          type: createPaymentDto.type,
+          type: 'advance' as any,
         });
         await payment.save();
+      }
+    } else if (createPaymentDto.type === 'union_fee' || createPaymentDto.type === 'security' || createPaymentDto.type === 'other') {
+      console.log(`Processing as SPECIAL payment: ${createPaymentDto.type}`);
+      // Handle one-time fees (Union Fee, etc.)
+      payment = new this.paymentModel({
+        ...createPaymentDto,
+        studentId: new Types.ObjectId(createPaymentDto.studentId),
+        billingMonth: createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7),
+        rentAmount: 0,
+        paidAmount: createPaymentDto.paidAmount,
+        dueAmount: 0,
+        advanceAmount: 0,
+        paymentMethod: createPaymentDto.paymentMethod || 'cash',
+        recordedBy: new Types.ObjectId(userId),
+        type: createPaymentDto.type,
+      });
+      await payment.save();
+
+      // IF SECURITY DEPOSIT, update the student's security balance and record a transaction
+      if (createPaymentDto.type === 'security') {
+        const student = await this.studentModel.findById(createPaymentDto.studentId);
+        if (student) {
+          student.securityDeposit += createPaymentDto.paidAmount;
+          await student.save();
+
+          const trans = new this.securityDepositTransactionModel({
+            studentId: new Types.ObjectId(createPaymentDto.studentId),
+            type: SecurityDepositTransactionType.ADJUSTMENT,
+            amount: createPaymentDto.paidAmount,
+            notes: createPaymentDto.notes || 'Additional Security Deposit',
+            processedBy: new Types.ObjectId(userId),
+          });
+          await trans.save();
+        }
+      }
     } else {
+
       // Regular payment for a specific month
       const billingMonth = createPaymentDto.billingMonth || new Date().toISOString().slice(0, 7);
-      
+
       // Validate that billing month is not before student's joining date
       const joiningDate = new Date(student.joiningDate);
       const joiningMonth = `${joiningDate.getFullYear()}-${String(joiningDate.getMonth() + 1).padStart(2, '0')}`;
       const billingMonthDate = new Date(billingMonth + '-01');
       const joiningMonthDate = new Date(joiningDate.getFullYear(), joiningDate.getMonth(), 1);
-      
+
       if (billingMonthDate < joiningMonthDate) {
         throw new BadRequestException(
           `Cannot create payment for ${billingMonth}. Student joined on ${joiningMonth}. Payments can only be made for months from the joining date onwards.`
         );
       }
-      
+
       // Check if payment for this month already exists
       const existingPayment = await this.paymentModel.findOne({
         studentId: new Types.ObjectId(createPaymentDto.studentId),
@@ -938,24 +979,24 @@ export class ResidentialService {
     }
 
     await this.createAuditLog('payment', 'Payment', payment._id.toString(), userId, null, payment.toObject());
-    
+
     // Emit real-time updates
     this.socketGateway.emitPaymentUpdate({
       studentId: createPaymentDto.studentId,
       payment: payment.toObject(),
     });
-    
+
     const dashboardStats = await this.getDashboardStats();
     this.socketGateway.emitDashboardUpdate(dashboardStats);
-    
+
     const dueStatus = await this.getStudentDueStatus(createPaymentDto.studentId);
     this.socketGateway.emitDueStatusUpdate(createPaymentDto.studentId, dueStatus);
-    
+
     // Emit notification
     const paymentMessage = createPaymentDto.isAdvance
       ? `Advance payment of ${createPaymentDto.paidAmount.toLocaleString()} BDT received from ${student.name}`
       : `Payment of ${createPaymentDto.paidAmount.toLocaleString()} BDT received from ${student.name} for ${createPaymentDto.billingMonth}`;
-    
+
     this.socketGateway.emitNotification({
       id: payment._id.toString(),
       type: 'payment',
@@ -964,14 +1005,14 @@ export class ResidentialService {
       link: `/dashboard/transactions/${payment._id}`,
       timestamp: new Date(),
     });
-    
+
     return payment;
   }
 
   // ========== SECURITY DEPOSIT METHODS ==========
   async useSecurityDepositForDues(studentId: string, useSecurityDepositDto: UseSecurityDepositDto, userId: string): Promise<any> {
     const student = await this.findStudentById(studentId);
-    
+
     if (student.securityDeposit < useSecurityDepositDto.amount) {
       throw new BadRequestException(`Insufficient security deposit. Available: ${student.securityDeposit} BDT, Requested: ${useSecurityDepositDto.amount} BDT`);
     }
@@ -981,7 +1022,7 @@ export class ResidentialService {
     const joiningMonth = `${joiningDate.getFullYear()}-${String(joiningDate.getMonth() + 1).padStart(2, '0')}`;
     const billingMonthDate = new Date(useSecurityDepositDto.billingMonth + '-01');
     const joiningMonthDate = new Date(joiningDate.getFullYear(), joiningDate.getMonth(), 1);
-    
+
     if (billingMonthDate < joiningMonthDate) {
       throw new BadRequestException(
         `Cannot use security deposit for ${useSecurityDepositDto.billingMonth}. Student joined on ${joiningMonth}. Payments can only be made for months from the joining date onwards.`
@@ -1072,7 +1113,7 @@ export class ResidentialService {
 
   async returnSecurityDeposit(studentId: string, returnSecurityDepositDto: ReturnSecurityDepositDto, userId: string): Promise<any> {
     const student = await this.findStudentById(studentId);
-    
+
     if (student.securityDeposit < returnSecurityDepositDto.amount) {
       throw new BadRequestException(`Insufficient security deposit. Available: ${student.securityDeposit} BDT, Requested: ${returnSecurityDepositDto.amount} BDT`);
     }
@@ -1154,7 +1195,7 @@ export class ResidentialService {
     // If using security deposit to pay dues
     if (useSecurityDeposit && remainingDues > 0 && student.securityDeposit > 0) {
       const amountToUse = Math.min(remainingDues, student.securityDeposit);
-      
+
       // Use security deposit to pay dues
       await this.useSecurityDepositForDues(studentId, {
         billingMonth: new Date().toISOString().slice(0, 7), // Current month
@@ -1177,45 +1218,45 @@ export class ResidentialService {
     // Let's look at what available assets we have:
     const remainingSecurity = student.securityDeposit;
     const unusedAdvance = dueStatus.totalAdvance; // This is advanced applied + unapplied? No, getStudentDueStatus returns totalAdvance which is remaining.
-    
+
     // Logic: The "refundAmount" should ideally be passed from controller. 
     // Since I cannot easily change the signature without updating controller, I will implement a logic:
     // If 'useSecurityDeposit' is true, we implicitly try to refund everything remaining.
-    
-    let totalRefundable = remainingSecurity + unusedAdvance;
-    
-    if (totalRefundable > 0) {
-       // Create a Refund Transaction
-       // We'll mark it as a 'refund' payment type
-       const refundPayment = new this.paymentModel({
-         studentId: new Types.ObjectId(studentId),
-         billingMonth: new Date().toISOString().slice(0, 7),
-         rentAmount: 0,
-         paidAmount: totalRefundable, // Verify if negative or positive implies refund. Usually refund is Outflow. 
-         // System seems to track 'paidAmount' as money IN. 
-         // Use negative amount to indicate money OUT? Or just rely on 'type'.
-         // Let's use negative for clarity in summation if we sum 'paidAmount'.
-         // BUT check schemas constraints: min: 0. 
-         // Constraint: paidAmount min 0. So we must use positive value and 'type' = 'refund'.
-         dueAmount: 0,
-         advanceAmount: 0,
-         paymentMethod: PaymentMethod.CASH,
-         notes: `Refund on checkout (Security: ${remainingSecurity}, Advance: ${unusedAdvance})`,
-         recordedBy: new Types.ObjectId(userId),
-         type: 'refund' as any, 
-       });
-       await refundPayment.save();
-       
-       securityDepositReturned = remainingSecurity;
-       advanceReturned = unusedAdvance;
 
-       // Zero out security deposit
-       student.securityDeposit = 0; 
-       
-       // Handle Advance "Settlement"
-       // We don't delete the advance payment anymore. We just added a Refund transaction that technically "offsets" it.
-       // However, `getStudentDueStatus` will still see the Advance Payment as "Available" next time?
-       // No, because student status is LEFT.
+    let totalRefundable = remainingSecurity + unusedAdvance;
+
+    if (totalRefundable > 0) {
+      // Create a Refund Transaction
+      // We'll mark it as a 'refund' payment type
+      const refundPayment = new this.paymentModel({
+        studentId: new Types.ObjectId(studentId),
+        billingMonth: new Date().toISOString().slice(0, 7),
+        rentAmount: 0,
+        paidAmount: totalRefundable, // Verify if negative or positive implies refund. Usually refund is Outflow. 
+        // System seems to track 'paidAmount' as money IN. 
+        // Use negative amount to indicate money OUT? Or just rely on 'type'.
+        // Let's use negative for clarity in summation if we sum 'paidAmount'.
+        // BUT check schemas constraints: min: 0. 
+        // Constraint: paidAmount min 0. So we must use positive value and 'type' = 'refund'.
+        dueAmount: 0,
+        advanceAmount: 0,
+        paymentMethod: PaymentMethod.CASH,
+        notes: `Refund on checkout (Security: ${remainingSecurity}, Advance: ${unusedAdvance})`,
+        recordedBy: new Types.ObjectId(userId),
+        type: 'refund' as any,
+      });
+      await refundPayment.save();
+
+      securityDepositReturned = remainingSecurity;
+      advanceReturned = unusedAdvance;
+
+      // Zero out security deposit
+      student.securityDeposit = 0;
+
+      // Handle Advance "Settlement"
+      // We don't delete the advance payment anymore. We just added a Refund transaction that technically "offsets" it.
+      // However, `getStudentDueStatus` will still see the Advance Payment as "Available" next time?
+      // No, because student status is LEFT.
     }
 
     // Return remaining security deposit if any  <-- We handled this above in new logic
@@ -1281,7 +1322,7 @@ export class ResidentialService {
     };
 
     await this.createAuditLog('checkout', 'Student', student._id.toString(), userId, null, statement);
-    
+
     // Emit notification
     this.socketGateway.emitNotification({
       id: `checkout-${studentId}-${Date.now()}`,
@@ -1333,12 +1374,12 @@ export class ResidentialService {
     // Get last 12 months of data
     const months: any[] = [];
     const today = new Date();
-    
+
     for (let i = 11; i >= 0; i--) {
       const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const monthString = date.toISOString().slice(0, 7); // YYYY-MM format
       const monthName = date.toLocaleString('default', { month: 'short' });
-      
+
       // Get all payments for this month (excluding advance payments)
       const monthPayments = await this.paymentModel.find({
         billingMonth: monthString,
@@ -1374,11 +1415,11 @@ export class ResidentialService {
       .findOne({ studentId: new RegExp(`^${prefix}`) })
       .sort({ studentId: -1 })
       .exec();
-    
+
     if (!lastStudent) {
       return `${prefix}001`;
     }
-    
+
     const lastNumber = parseInt(lastStudent.studentId.slice(-3));
     const newNumber = (lastNumber + 1).toString().padStart(3, '0');
     return `${prefix}${newNumber}`;
@@ -1388,7 +1429,7 @@ export class ResidentialService {
     const months = [];
     const joinDate = new Date(joiningDate);
     const current = new Date(currentMonth + '-01');
-    
+
     let date = new Date(joinDate.getFullYear(), joinDate.getMonth(), 1);
     while (date <= current) {
       const year = date.getFullYear();
@@ -1396,7 +1437,7 @@ export class ResidentialService {
       months.push(`${year}-${month}`);
       date.setMonth(date.getMonth() + 1);
     }
-    
+
     return months;
   }
 

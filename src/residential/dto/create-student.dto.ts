@@ -44,4 +44,10 @@ export class CreateStudentDto {
   @Min(0)
   @IsOptional()
   unionFee?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  initialRentPaid?: number;
 }
+
