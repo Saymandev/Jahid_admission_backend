@@ -671,7 +671,7 @@ export class ResidentialService {
             ...p, 
             source: 'residential', 
             studentName: p.studentId?.name,
-            paymentType: p.type || 'rent'
+            paymentType: (p.paymentMethod === 'adjustment' || p.type === 'adjustment') ? 'adjustment' : (p.type || 'rent')
         })),
         ...coachPayments.map(p => ({ 
             ...p, 

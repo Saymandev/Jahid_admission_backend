@@ -16,6 +16,7 @@ export enum PaymentType {
   SECURITY = 'security',
   UNION_FEE = 'union_fee',
   REFUND = 'refund',
+  ADJUSTMENT = 'adjustment',
   OTHER = 'other',
 }
 
