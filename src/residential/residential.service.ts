@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CoachingService } from '../coaching/coaching.service';
+import { AdmissionPayment, AdmissionPaymentDocument } from '../coaching/schemas/admission-payment.schema';
+import { Admission, AdmissionDocument } from '../coaching/schemas/admission.schema';
 import { SocketGateway } from '../socket/socket.gateway';
 import { CreateBulkPaymentDto } from './dto/create-bulk-payment.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -29,6 +31,8 @@ export class ResidentialService {
     @InjectModel(AuditLog.name) private auditLogModel: Model<AuditLogDocument>,
     @InjectModel(SecurityDepositTransaction.name) private securityDepositTransactionModel: Model<SecurityDepositTransactionDocument>,
     @InjectModel(AdvanceApplication.name) private advanceApplicationModel: Model<AdvanceApplicationDocument>,
+    @InjectModel(Admission.name) private admissionModel: Model<AdmissionDocument>,
+    @InjectModel(AdmissionPayment.name) private coachingPaymentModel: Model<AdmissionPaymentDocument>,
     @Inject(forwardRef(() => SocketGateway)) private socketGateway: SocketGateway,
     private coachingService: CoachingService,
   ) { }
@@ -596,6 +600,120 @@ export class ResidentialService {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getUnifiedTransactions(
+    queryDto: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      typeFilter?: string;
+      userFilter?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+    currentUserId?: string,
+  ): Promise<any> {
+    const page = Number(queryDto.page) || 1;
+    const limit = Number(queryDto.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Filters for Residential
+    const resQuery: any = { isDeleted: false };
+    if (currentUserId) resQuery.recordedBy = new Types.ObjectId(currentUserId);
+    if (queryDto.userFilter) resQuery.recordedBy = new Types.ObjectId(queryDto.userFilter);
+    
+    // Filters for Coaching
+    const coachQuery: any = { isDeleted: false };
+    if (currentUserId) coachQuery.recordedBy = new Types.ObjectId(currentUserId);
+    if (queryDto.userFilter) coachQuery.recordedBy = new Types.ObjectId(queryDto.userFilter);
+
+    // Apply Date Range
+    if (queryDto.startDate || queryDto.endDate) {
+      const dateRange: any = {};
+      if (queryDto.startDate) dateRange.$gte = new Date(queryDto.startDate);
+      if (queryDto.endDate) {
+        const end = new Date(queryDto.endDate);
+        end.setHours(23, 59, 59, 999);
+        dateRange.$lte = end;
+      }
+      resQuery.createdAt = dateRange;
+      coachQuery.createdAt = dateRange;
+    }
+
+    let resPayments = [];
+    let coachPayments = [];
+
+    const effectiveTypeFilter = queryDto.typeFilter || 'all';
+
+    if (effectiveTypeFilter === 'all' || effectiveTypeFilter === 'residential') {
+        resPayments = await this.paymentModel
+            .find(resQuery)
+            .populate('studentId', 'name studentId phone')
+            .populate('recordedBy', 'name email')
+            .lean()
+            .exec();
+    }
+
+    if (effectiveTypeFilter === 'all' || effectiveTypeFilter === 'coaching') {
+        coachPayments = await this.coachingPaymentModel
+            .find(coachQuery)
+            .populate('admissionId', 'studentName course batch phone')
+            .populate('recordedBy', 'name email')
+            .lean()
+            .exec();
+    }
+
+    // Merge and Tag
+    const all = [
+        ...resPayments.map(p => ({ 
+            ...p, 
+            source: 'residential', 
+            studentName: p.studentId?.name,
+            paymentType: p.type || 'rent'
+        })),
+        ...coachPayments.map(p => ({ 
+            ...p, 
+            source: 'coaching', 
+            studentName: p.admissionId?.studentName, 
+            amount: p.paidAmount,
+            paymentType: 'coaching'
+        }))
+    ];
+
+    // Filter by search
+    let filtered = all;
+    if (queryDto.search) {
+        const searchRegex = new RegExp(queryDto.search, 'i');
+        filtered = all.filter(p => 
+            (p.studentName && searchRegex.test(p.studentName)) ||
+            (p.transactionId && searchRegex.test(p.transactionId)) ||
+            (p.notes && searchRegex.test(p.notes)) ||
+            (p.paymentMethod && searchRegex.test(p.paymentMethod))
+        );
+    }
+
+    // Sort
+    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Calculate Totals for the results (all filtered results)
+    const totalAmount = filtered.reduce((sum, p) => {
+        const amt = p.paidAmount || p.amount || 0;
+        if (p.paymentType === 'refund') return sum - amt;
+        return sum + amt;
+    }, 0);
+
+    // Paginate
+    const paginated = filtered.slice(skip, skip + limit);
+
+    return {
+        data: paginated,
+        total: filtered.length,
+        totalAmount,
+        page,
+        limit,
+        totalPages: Math.ceil(filtered.length / limit),
     };
   }
 

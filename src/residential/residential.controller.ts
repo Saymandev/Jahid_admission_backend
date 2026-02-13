@@ -215,6 +215,31 @@ export class ResidentialController {
     return this.residentialService.getAllPayments(pagination, userId);
   }
 
+  @Get('transactions')
+  getUnifiedTransactions(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('typeFilter') typeFilter?: string,
+    @Query('userFilter') userFilter?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const queryDto = {
+        page: page ? parseInt(page, 10) : undefined,
+        limit: limit ? parseInt(limit, 10) : undefined,
+        search,
+        typeFilter,
+        userFilter,
+        startDate,
+        endDate,
+    };
+    // Staff users can only see their own transactions
+    const currentUserId = user?.role === 'staff' ? user.sub : undefined;
+    return this.residentialService.getUnifiedTransactions(queryDto, currentUserId);
+  }
+
   @Post('payments')
   createPayment(@Body() createPaymentDto: CreatePaymentDto, @CurrentUser() user: any) {
     return this.residentialService.createPayment(createPaymentDto, user.sub);
