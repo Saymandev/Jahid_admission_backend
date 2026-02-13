@@ -1,29 +1,30 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  Query,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Param,
+    Patch,
+    Post,
+    Query,
+    UseGuards,
 } from '@nestjs/common';
-import { ResidentialService } from './residential.service';
-import { CreateRoomDto } from './dto/create-room.dto';
-import { UpdateRoomDto } from './dto/update-room.dto';
-import { CreateStudentDto } from './dto/create-student.dto';
-import { UpdateStudentDto } from './dto/update-student.dto';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { UseSecurityDepositDto } from './dto/use-security-deposit.dto';
-import { ReturnSecurityDepositDto } from './dto/return-security-deposit.dto';
-import { ReactivateStudentDto } from './dto/reactivate-student.dto';
-import { PaginationDto } from './dto/pagination.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
+import { CreateBulkPaymentDto } from './dto/create-bulk-payment.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateRoomDto } from './dto/create-room.dto';
+import { CreateStudentDto } from './dto/create-student.dto';
+import { PaginationDto } from './dto/pagination.dto';
+import { ReactivateStudentDto } from './dto/reactivate-student.dto';
+import { ReturnSecurityDepositDto } from './dto/return-security-deposit.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
+import { UseSecurityDepositDto } from './dto/use-security-deposit.dto';
+import { ResidentialService } from './residential.service';
 import { StudentStatus } from './schemas/student.schema';
 
 @Controller('residential')
@@ -217,6 +218,11 @@ export class ResidentialController {
   @Post('payments')
   createPayment(@Body() createPaymentDto: CreatePaymentDto, @CurrentUser() user: any) {
     return this.residentialService.createPayment(createPaymentDto, user.sub);
+  }
+
+  @Post('payments/bulk')
+  createBulkPayment(@Body() createBulkPaymentDto: CreateBulkPaymentDto, @CurrentUser() user: any) {
+    return this.residentialService.createBulkPayment(createBulkPaymentDto, user.sub);
   }
 
   @Delete('students/:id/advance-payment')

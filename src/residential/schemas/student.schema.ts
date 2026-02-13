@@ -40,6 +40,9 @@ export class Student {
   @Prop({ default: 0, min: 0 })
   securityDeposit: number;
 
+  @Prop({ default: 0, min: 0 })
+  unionFee: number;
+
   @Prop({ enum: StudentStatus, default: StudentStatus.ACTIVE })
   status: StudentStatus;
 

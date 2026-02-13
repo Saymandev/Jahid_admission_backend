@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CoachingService } from '../coaching/coaching.service';
 import { SocketGateway } from '../socket/socket.gateway';
+import { CreateBulkPaymentDto } from './dto/create-bulk-payment.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { CreateStudentDto } from './dto/create-student.dto';
@@ -226,14 +227,13 @@ export class ResidentialService {
 
     const student = new this.studentModel({
       ...createStudentDto,
+      securityDeposit: 0, // Initialize to 0; createPayment will handle the initial deposit if provided
       studentId,
       roomId: new Types.ObjectId(createStudentDto.roomId),
       bedNumber: bedNumber!,
       monthlyRent: createStudentDto.monthlyRent || bedPrice,
       joiningDate: new Date(createStudentDto.joiningDate),
     });
-    await student.save();
-
     await student.save();
 
     // Update room occupied beds
@@ -655,6 +655,7 @@ export class ResidentialService {
     const months = this.generateMonthsSinceJoining(student.joiningDate, currentMonthString);
 
     const paymentMap = new Map<string, { totalPaid: number, records: any[] }>();
+    const extraPayments = [];
     // Group all payments by billingMonth to handle multiple transactions per month
     payments.forEach(p => {
       if (!p.type || p.type === 'rent' || p.type === 'advance' || p.billingMonth === 'ADVANCE') {
@@ -662,6 +663,9 @@ export class ResidentialService {
         existing.totalPaid += p.paidAmount;
         existing.records.push(p);
         paymentMap.set(p.billingMonth, existing);
+      } else {
+        // Collect other types of payments (security, union fees, etc.)
+        extraPayments.push(p);
       }
     });
 
@@ -804,6 +808,7 @@ export class ResidentialService {
       totalAdvance: remainingAdvance,
       dueStatus: maxConsecutiveDue === 0 ? 'no_due' : maxConsecutiveDue === 1 ? 'one_month' : 'two_plus_months',
       consecutiveDueMonths: maxConsecutiveDue,
+      extraPayments: extraPayments, // Return security deposits, union fees, etc.
     };
   }
 
@@ -902,21 +907,25 @@ export class ResidentialService {
       });
       await payment.save();
 
-      // IF SECURITY DEPOSIT, update the student's security balance and record a transaction
-      if (createPaymentDto.type === 'security') {
+      // IF SECURITY DEPOSIT or UNION FEE, update the student's balance
+      if (createPaymentDto.type === 'security' || createPaymentDto.type === 'union_fee') {
         const student = await this.studentModel.findById(createPaymentDto.studentId);
         if (student) {
-          student.securityDeposit += createPaymentDto.paidAmount;
-          await student.save();
+          if (createPaymentDto.type === 'security') {
+            student.securityDeposit += createPaymentDto.paidAmount;
 
-          const trans = new this.securityDepositTransactionModel({
-            studentId: new Types.ObjectId(createPaymentDto.studentId),
-            type: SecurityDepositTransactionType.ADJUSTMENT,
-            amount: createPaymentDto.paidAmount,
-            notes: createPaymentDto.notes || 'Additional Security Deposit',
-            processedBy: new Types.ObjectId(userId),
-          });
-          await trans.save();
+            const trans = new this.securityDepositTransactionModel({
+              studentId: new Types.ObjectId(createPaymentDto.studentId),
+              type: SecurityDepositTransactionType.ADJUSTMENT,
+              amount: createPaymentDto.paidAmount,
+              notes: createPaymentDto.notes || 'Additional Security Deposit',
+              processedBy: new Types.ObjectId(userId),
+            });
+            await trans.save();
+          } else if (createPaymentDto.type === 'union_fee') {
+            student.unionFee += createPaymentDto.paidAmount;
+          }
+          await student.save();
         }
       }
     } else {
@@ -937,13 +946,21 @@ export class ResidentialService {
       }
 
 
+      // Calculate how much has already been paid for this month to avoid double-charging rent
+      const existingPayments = await this.paymentModel.find({
+        studentId: new Types.ObjectId(createPaymentDto.studentId),
+        billingMonth: billingMonth,
+        isDeleted: false,
+        type: 'rent'
+      });
+      const totalPaidSoFar = existingPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+      const remainingRentDue = Math.max(0, student.monthlyRent - totalPaidSoFar);
+
       const rentAmount = student.monthlyRent;
 
       // We always create a new payment record now to preserve transaction history
-      // Individual record due/advance is less important because getStudentDueStatus aggregates them
-      // But for consistency we'll set them based on THIS payment.
-      const dueAmount = Math.max(0, rentAmount - createPaymentDto.paidAmount);
-      const advanceAmount = Math.max(0, createPaymentDto.paidAmount - rentAmount);
+      const dueAmount = Math.max(0, remainingRentDue - createPaymentDto.paidAmount);
+      const advanceAmount = Math.max(0, createPaymentDto.paidAmount - remainingRentDue);
 
       payment = new this.paymentModel({
         ...createPaymentDto,
@@ -989,6 +1006,71 @@ export class ResidentialService {
     });
 
     return payment;
+  }
+
+  async createBulkPayment(bulkDto: CreateBulkPaymentDto, userId: string): Promise<any> {
+    const results = [];
+    const student = await this.findStudentById(bulkDto.studentId);
+
+    // 1. Process Rent Payment
+    if (bulkDto.rentAmount && bulkDto.rentAmount > 0) {
+      const rentPayment = await this.createPayment({
+        studentId: bulkDto.studentId,
+        billingMonth: bulkDto.billingMonth,
+        paidAmount: bulkDto.rentAmount,
+        paymentMethod: bulkDto.paymentMethod,
+        transactionId: bulkDto.transactionId,
+        notes: bulkDto.notes,
+        isAdvance: bulkDto.isAdvance,
+        type: 'rent',
+      } as any, userId);
+      results.push(rentPayment);
+    }
+
+    // 2. Process Security Deposit
+    if (bulkDto.securityAmount && bulkDto.securityAmount > 0) {
+      const securityPayment = await this.createPayment({
+        studentId: bulkDto.studentId,
+        paidAmount: bulkDto.securityAmount,
+        paymentMethod: bulkDto.paymentMethod,
+        transactionId: bulkDto.transactionId,
+        notes: bulkDto.notes || 'Bulk Security Deposit',
+        type: 'security',
+      } as any, userId);
+      results.push(securityPayment);
+    }
+
+    // 3. Process Union Fee
+    if (bulkDto.unionFeeAmount && bulkDto.unionFeeAmount > 0) {
+      const unionPayment = await this.createPayment({
+        studentId: bulkDto.studentId,
+        paidAmount: bulkDto.unionFeeAmount,
+        paymentMethod: bulkDto.paymentMethod,
+        transactionId: bulkDto.transactionId,
+        notes: bulkDto.notes || 'Bulk Union Fee',
+        type: 'union_fee',
+      } as any, userId);
+      results.push(unionPayment);
+    }
+
+    // 4. Process Other Fee
+    if (bulkDto.otherAmount && bulkDto.otherAmount > 0) {
+      const otherPayment = await this.createPayment({
+        studentId: bulkDto.studentId,
+        paidAmount: bulkDto.otherAmount,
+        paymentMethod: bulkDto.paymentMethod,
+        transactionId: bulkDto.transactionId,
+        notes: bulkDto.notes || 'Bulk Other Fee',
+        type: 'other',
+      } as any, userId);
+      results.push(otherPayment);
+    }
+
+    return {
+      success: true,
+      count: results.length,
+      payments: results,
+    };
   }
 
   // ========== SECURITY DEPOSIT METHODS ==========
