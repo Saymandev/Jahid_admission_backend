@@ -834,18 +834,8 @@ export class ResidentialService {
 
     // Get total advance amount from:
     // 1. Explicit advance payments (billingMonth = 'ADVANCE')
-    // 2. Overpayment advance (advanceAmount from regular payments)
     const advanceMapData = paymentMap.get('ADVANCE');
     let totalAdvance = advanceMapData?.totalPaid || 0;
-
-    // Add advance from overpayments in regular payments
-    // Note: We sum advanceAmount from individual records
-    payments.forEach((p) => {
-      if (p.billingMonth !== 'ADVANCE' && p.advanceAmount > 0) {
-        totalAdvance += p.advanceAmount;
-      }
-    });
-
     const advancePaymentId = advanceMapData?.records?.[0]?._id;
 
     for (const month of months) {
@@ -905,6 +895,7 @@ export class ResidentialService {
       });
 
       const generatedAdvance = Math.max(0, paidAmount - rentAmount);
+      totalAdvance += generatedAdvance;
 
       status.push({
         month,
