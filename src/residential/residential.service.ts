@@ -228,6 +228,7 @@ export class ResidentialService {
     const student = new this.studentModel({
       ...createStudentDto,
       securityDeposit: 0, // Initialize to 0; createPayment will handle the initial deposit if provided
+      unionFee: 0, // Initialize to 0; createPayment will handle the initial fee if provided
       studentId,
       roomId: new Types.ObjectId(createStudentDto.roomId),
       bedNumber: bedNumber!,
@@ -1131,6 +1132,7 @@ export class ResidentialService {
         paymentMethod: PaymentMethod.ADJUSTMENT,
         notes: `[Security Deposit Used: ${useSecurityDepositDto.amount} BDT] ${useSecurityDepositDto.notes || ''}`,
         recordedBy: new Types.ObjectId(userId),
+        type: 'adjustment',
       });
       await payment.save();
     }
@@ -1195,6 +1197,21 @@ export class ResidentialService {
       processedBy: new Types.ObjectId(userId),
     });
     await transaction.save();
+
+    // ALSO Record as a Refund Payment for the main ledger/transaction history
+    const refundPayment = new this.paymentModel({
+      studentId: new Types.ObjectId(studentId),
+      billingMonth: new Date().toISOString().slice(0, 7),
+      rentAmount: 0,
+      paidAmount: returnSecurityDepositDto.amount,
+      dueAmount: 0,
+      advanceAmount: 0,
+      paymentMethod: PaymentMethod.CASH, // Assuming cash return
+      notes: returnSecurityDepositDto.notes || 'Security Deposit Returned',
+      recordedBy: new Types.ObjectId(userId),
+      type: 'refund',
+    });
+    await refundPayment.save();
 
     await this.createAuditLog('return_security_deposit', 'SecurityDeposit', transaction._id.toString(), userId, null, transaction.toObject());
 
