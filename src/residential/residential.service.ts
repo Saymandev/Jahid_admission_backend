@@ -1030,7 +1030,7 @@ export class ResidentialService {
       existingPayment.paidAmount = newPaidAmount;
       existingPayment.dueAmount = dueAmount;
       existingPayment.advanceAmount = advanceAmount;
-      existingPayment.paymentMethod = PaymentMethod.CASH;
+      existingPayment.paymentMethod = PaymentMethod.ADJUSTMENT;
       existingPayment.notes = `${existingPayment.notes || ''}\n[Security Deposit Used: ${useSecurityDepositDto.amount} BDT] ${useSecurityDepositDto.notes || ''}`.trim();
       await existingPayment.save();
       payment = existingPayment;
@@ -1046,7 +1046,7 @@ export class ResidentialService {
         paidAmount: useSecurityDepositDto.amount,
         dueAmount,
         advanceAmount,
-        paymentMethod: PaymentMethod.CASH,
+        paymentMethod: PaymentMethod.ADJUSTMENT,
         notes: `[Security Deposit Used: ${useSecurityDepositDto.amount} BDT] ${useSecurityDepositDto.notes || ''}`,
         recordedBy: new Types.ObjectId(userId),
       });
@@ -1223,7 +1223,7 @@ export class ResidentialService {
         // Constraint: paidAmount min 0. So we must use positive value and 'type' = 'refund'.
         dueAmount: 0,
         advanceAmount: 0,
-        paymentMethod: PaymentMethod.CASH,
+        paymentMethod: PaymentMethod.ADJUSTMENT,
         notes: `Refund on checkout (Security: ${remainingSecurity}, Advance: ${unusedAdvance})`,
         recordedBy: new Types.ObjectId(userId),
         type: 'refund' as any,
@@ -1373,6 +1373,9 @@ export class ResidentialService {
 
       // Calculate collection (total paid amount for this month)
       const collection = monthPayments.reduce((sum, payment) => {
+        if (payment.paymentMethod === PaymentMethod.ADJUSTMENT) {
+          return sum;
+        }
         if (payment.type === 'refund') {
           return sum - (payment.paidAmount || 0);
         }

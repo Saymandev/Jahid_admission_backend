@@ -7,6 +7,7 @@ export enum PaymentMethod {
   CASH = 'cash',
   BKASH = 'bkash',
   BANK = 'bank',
+  ADJUSTMENT = 'adjustment',
 }
 
 export enum PaymentType {
