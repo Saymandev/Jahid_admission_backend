@@ -778,7 +778,7 @@ export class ResidentialService {
     const extraPayments = [];
     // Group all payments by billingMonth to handle multiple transactions per month
     payments.forEach(p => {
-      if (!p.type || p.type === 'rent' || p.type === 'advance' || p.billingMonth === 'ADVANCE') {
+      if (!p.type || p.type === 'rent' || p.type === 'advance' || p.type === 'adjustment' || p.billingMonth === 'ADVANCE') {
         const existing = paymentMap.get(p.billingMonth) || { totalPaid: 0, records: [] };
         existing.totalPaid += p.paidAmount;
         existing.records.push(p);
@@ -1213,48 +1213,35 @@ export class ResidentialService {
       );
     }
 
-    // Get or create payment for the billing month
-    const existingPayment = await this.paymentModel.findOne({
+    // Get all existing payments for the billing month to calculate remaining due
+    const existingPayments = await this.paymentModel.find({
       studentId: new Types.ObjectId(studentId),
       billingMonth: useSecurityDepositDto.billingMonth,
       isDeleted: false,
+      type: { $in: ['rent', 'adjustment'] }
     });
 
+    const totalPaidSoFar = existingPayments.reduce((sum, p) => sum + p.paidAmount, 0);
     const rentAmount = student.monthlyRent;
-    let payment: PaymentDocument;
+    const remainingRentDue = Math.max(0, rentAmount - totalPaidSoFar);
 
-    if (existingPayment) {
-      // Update existing payment
-      const newPaidAmount = existingPayment.paidAmount + useSecurityDepositDto.amount;
-      const dueAmount = Math.max(0, rentAmount - newPaidAmount);
-      const advanceAmount = Math.max(0, newPaidAmount - rentAmount);
+    const dueAmount = Math.max(0, remainingRentDue - useSecurityDepositDto.amount);
+    const advanceAmount = Math.max(0, useSecurityDepositDto.amount - remainingRentDue);
 
-      existingPayment.paidAmount = newPaidAmount;
-      existingPayment.dueAmount = dueAmount;
-      existingPayment.advanceAmount = advanceAmount;
-      existingPayment.paymentMethod = PaymentMethod.ADJUSTMENT;
-      existingPayment.notes = `${existingPayment.notes || ''}\n[Security Deposit Used: ${useSecurityDepositDto.amount} BDT] ${useSecurityDepositDto.notes || ''}`.trim();
-      await existingPayment.save();
-      payment = existingPayment;
-    } else {
-      // Create new payment
-      const dueAmount = Math.max(0, rentAmount - useSecurityDepositDto.amount);
-      const advanceAmount = Math.max(0, useSecurityDepositDto.amount - rentAmount);
-
-      payment = new this.paymentModel({
-        studentId: new Types.ObjectId(studentId),
-        billingMonth: useSecurityDepositDto.billingMonth,
-        rentAmount,
-        paidAmount: useSecurityDepositDto.amount,
-        dueAmount,
-        advanceAmount,
-        paymentMethod: PaymentMethod.ADJUSTMENT,
-        notes: `[Security Deposit Used: ${useSecurityDepositDto.amount} BDT] ${useSecurityDepositDto.notes || ''}`,
-        recordedBy: new Types.ObjectId(userId),
-        type: 'adjustment',
-      });
-      await payment.save();
-    }
+    // Always create a NEW payment record to preserve transaction history
+    const payment = new this.paymentModel({
+      studentId: new Types.ObjectId(studentId),
+      billingMonth: useSecurityDepositDto.billingMonth,
+      rentAmount,
+      paidAmount: useSecurityDepositDto.amount,
+      dueAmount,
+      advanceAmount,
+      paymentMethod: PaymentMethod.ADJUSTMENT,
+      notes: `[Security Deposit Used: ${useSecurityDepositDto.amount} BDT] ${useSecurityDepositDto.notes || ''}`,
+      recordedBy: new Types.ObjectId(userId),
+      type: 'adjustment',
+    });
+    await payment.save();
 
     // Deduct from security deposit
     student.securityDeposit = student.securityDeposit - useSecurityDepositDto.amount;
