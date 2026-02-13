@@ -904,13 +904,16 @@ export class ResidentialService {
         isDeleted: false,
       });
 
+      const generatedAdvance = Math.max(0, paidAmount - rentAmount);
+
       status.push({
         month,
         rentAmount,
         paidAmount,
         dueAmount,
-        advanceAmount: monthAdvance,
-        advanceApplied: advanceApplication ? advanceApplication.advanceAmountApplied : 0,
+        advanceAmount: monthAdvance + generatedAdvance,
+        advanceApplied: monthAdvance || (advanceApplication ? advanceApplication.advanceAmountApplied : 0),
+        advanceGenerated: generatedAdvance,
         // Return individual transaction records for this month
         records: monthData?.records || [],
         status: dueAmount === 0 ? 'paid' : dueAmount < rentAmount ? 'partial' : 'unpaid',
