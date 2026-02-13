@@ -701,6 +701,7 @@ export class ResidentialService {
     const totalAmount = filtered.reduce((sum, p) => {
         const amt = p.paidAmount || p.amount || 0;
         if (p.paymentType === 'refund') return sum - amt;
+        if (p.paymentType === 'adjustment') return sum; // Exclude non-cash adjustments from total
         return sum + amt;
     }, 0);
 
