@@ -1,10 +1,10 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CoachingService } from '../coaching/coaching.service';
 import { AdmissionPayment, AdmissionPaymentDocument } from '../coaching/schemas/admission-payment.schema';
 import { Admission, AdmissionDocument } from '../coaching/schemas/admission.schema';
-import { SocketGateway } from '../socket/socket.gateway';
+import { PusherService } from '../common/pusher/pusher.service';
 import { CreateBulkPaymentDto } from './dto/create-bulk-payment.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -33,7 +33,7 @@ export class ResidentialService {
     @InjectModel(AdvanceApplication.name) private advanceApplicationModel: Model<AdvanceApplicationDocument>,
     @InjectModel(Admission.name) private admissionModel: Model<AdmissionDocument>,
     @InjectModel(AdmissionPayment.name) private coachingPaymentModel: Model<AdmissionPaymentDocument>,
-    @Inject(forwardRef(() => SocketGateway)) private socketGateway: SocketGateway,
+    private pusherService: PusherService,
     private coachingService: CoachingService,
   ) { }
 
@@ -537,7 +537,7 @@ export class ResidentialService {
     await this.createAuditLog('reactivate', 'Student', student._id.toString(), userId, oldData, student.toObject());
 
     // Emit real-time updates
-    this.socketGateway.emitDashboardUpdate(await this.getDashboardStats());
+    this.pusherService.emitDashboardUpdate(await this.getDashboardStats());
 
     return student;
   }
@@ -816,7 +816,7 @@ export class ResidentialService {
 
 
         // Emit notification for auto-created due
-        this.socketGateway.emitNotification({
+        this.pusherService.emitNotification({
           id: `due-${studentId}-${month}`,
           type: 'due',
           title: 'New Due Created',
@@ -1094,23 +1094,23 @@ export class ResidentialService {
     await this.createAuditLog('payment', 'Payment', payment._id.toString(), userId, null, payment.toObject());
 
     // Emit real-time updates
-    this.socketGateway.emitPaymentUpdate({
+    this.pusherService.emitPaymentUpdate({
       studentId: createPaymentDto.studentId,
       payment: payment.toObject(),
     });
 
     const dashboardStats = await this.getDashboardStats();
-    this.socketGateway.emitDashboardUpdate(dashboardStats);
+    this.pusherService.emitDashboardUpdate(dashboardStats);
 
     const dueStatus = await this.getStudentDueStatus(createPaymentDto.studentId);
-    this.socketGateway.emitDueStatusUpdate(createPaymentDto.studentId, dueStatus);
+    this.pusherService.emitDueStatusUpdate(createPaymentDto.studentId, dueStatus);
 
     // Emit notification
     const paymentMessage = createPaymentDto.isAdvance
       ? `Advance payment of ${createPaymentDto.paidAmount.toLocaleString()} BDT received from ${student.name}`
       : `Payment of ${createPaymentDto.paidAmount.toLocaleString()} BDT received from ${student.name} for ${createPaymentDto.billingMonth}`;
 
-    this.socketGateway.emitNotification({
+    this.pusherService.emitNotification({
       id: payment._id.toString(),
       type: 'payment',
       title: createPaymentDto.isAdvance ? 'Advance Payment Recorded' : 'Payment Recorded',
@@ -1257,11 +1257,11 @@ export class ResidentialService {
 
     // Emit updates
     const dueStatus = await this.getStudentDueStatus(studentId);
-    this.socketGateway.emitDueStatusUpdate(studentId, dueStatus);
-    this.socketGateway.emitPaymentUpdate({ studentId, payment: payment.toObject() });
+    this.pusherService.emitDueStatusUpdate(studentId, dueStatus);
+    this.pusherService.emitPaymentUpdate({ studentId, payment: payment.toObject() });
 
     // Emit notification
-    this.socketGateway.emitNotification({
+    this.pusherService.emitNotification({
       id: transaction._id.toString(),
       type: 'payment',
       title: 'Security Deposit Used',
@@ -1316,7 +1316,7 @@ export class ResidentialService {
     await this.createAuditLog('return_security_deposit', 'SecurityDeposit', transaction._id.toString(), userId, null, transaction.toObject());
 
     // Emit notification
-    this.socketGateway.emitNotification({
+    this.pusherService.emitNotification({
       id: transaction._id.toString(),
       type: 'payment',
       title: 'Security Deposit Returned',
@@ -1508,7 +1508,7 @@ export class ResidentialService {
     await this.createAuditLog('checkout', 'Student', student._id.toString(), userId, null, statement);
 
     // Emit notification
-    this.socketGateway.emitNotification({
+    this.pusherService.emitNotification({
       id: `checkout-${studentId}-${Date.now()}`,
       type: 'student',
       title: 'Student Checked Out',

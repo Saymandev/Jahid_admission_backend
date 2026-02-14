@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { PusherService } from '../common/pusher/pusher.service';
 import { PaginationDto } from '../residential/dto/pagination.dto';
-import { SocketGateway } from '../socket/socket.gateway';
 import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
 import { CreateAdmissionDto } from './dto/create-admission.dto';
 import { AdmissionPayment, AdmissionPaymentDocument } from './schemas/admission-payment.schema';
@@ -13,7 +13,7 @@ export class CoachingService {
   constructor(
     @InjectModel(Admission.name) private admissionModel: Model<AdmissionDocument>,
     @InjectModel(AdmissionPayment.name) private paymentModel: Model<AdmissionPaymentDocument>,
-    private socketGateway: SocketGateway,
+    private pusherService: PusherService,
   ) {}
 
   async createAdmission(createAdmissionDto: CreateAdmissionDto, userId: string): Promise<AdmissionDocument> {
@@ -146,13 +146,13 @@ export class CoachingService {
     await payment.save();
 
     // Emit real-time updates
-    this.socketGateway.emitPaymentUpdate({
+    this.pusherService.emitPaymentUpdate({
       admissionId: createPaymentDto.admissionId,
       payment: payment.toObject(),
     });
 
     // Emit notification
-    this.socketGateway.emitNotification({
+    this.pusherService.emitNotification({
       id: payment._id.toString(),
       type: 'payment',
       title: 'Payment Recorded',

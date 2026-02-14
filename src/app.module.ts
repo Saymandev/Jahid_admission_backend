@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
+import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { ResidentialModule } from './residential/residential.module';
 import { CoachingModule } from './coaching/coaching.module';
-import { SocketModule } from './socket/socket.module';
+import { PusherModule } from './common/pusher/pusher.module';
 import { CronModule } from './cron/cron.module';
 import { HealthController } from './health/health.controller';
+import { ResidentialModule } from './residential/residential.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -28,7 +28,7 @@ import { HealthController } from './health/health.controller';
     UsersModule,
     ResidentialModule,
     CoachingModule,
-    SocketModule,
+    PusherModule,
     CronModule,
   ],
   controllers: [HealthController],
