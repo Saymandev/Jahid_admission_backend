@@ -217,6 +217,48 @@ export class CoachingService {
     };
   }
 
+  async findAdmissionByPhone(phone: string): Promise<AdmissionDocument | null> {
+    return this.admissionModel.findOne({ phone: phone.trim(), isDeleted: false }).sort({ createdAt: -1 }).exec();
+  }
+
+  async deletePayment(paymentId: string, userId: string): Promise<void> {
+    const payment = await this.paymentModel.findById(paymentId);
+    if (!payment || payment.isDeleted) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    const admission = await this.admissionModel.findById(payment.admissionId);
+    if (!admission) {
+      throw new NotFoundException('Admission record not found');
+    }
+
+    const oldData = payment.toObject();
+
+    // 1. Balance Reversal
+    admission.paidAmount -= payment.paidAmount;
+    admission.dueAmount = Math.max(0, admission.totalFee - admission.paidAmount);
+    
+    // If it was completed, set it back to pending if there's now a due
+    if (admission.status === AdmissionStatus.COMPLETED && admission.dueAmount > 0) {
+      admission.status = AdmissionStatus.PENDING;
+    }
+    
+    await admission.save();
+
+    // 2. Soft Delete
+    payment.isDeleted = true;
+    payment.deletedAt = new Date();
+    await payment.save();
+
+    // 3. Emit Updates
+    this.pusherService.emitPaymentUpdate({
+      admissionId: admission._id.toString(),
+      payment: payment.toObject(),
+    });
+    
+    this.pusherService.emitDashboardUpdate({});
+  }
+
   private async generateAdmissionId(): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `ADM${year}`;

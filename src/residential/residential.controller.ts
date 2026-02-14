@@ -118,6 +118,11 @@ export class ResidentialController {
     return this.residentialService.restoreStudent(id, user.sub);
   }
 
+  @Get('students/lookup')
+  lookupStudent(@Query('phone') phone: string) {
+    return this.residentialService.lookupStudent(phone);
+  }
+
   @Get('students/search')
   findStudentByPhoneOrName(@Query('phone') phone?: string, @Query('name') name?: string) {
     return this.residentialService.findStudentByPhoneOrName(phone, name);
@@ -248,6 +253,12 @@ export class ResidentialController {
   @Post('payments/bulk')
   createBulkPayment(@Body() createBulkPaymentDto: CreateBulkPaymentDto, @CurrentUser() user: any) {
     return this.residentialService.createBulkPayment(createBulkPaymentDto, user.sub);
+  }
+
+  @Delete('payments/:id')
+  @Roles(UserRole.ADMIN)
+  deletePayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.residentialService.deletePayment(id, user.sub);
   }
 
   @Delete('students/:id/advance-payment')

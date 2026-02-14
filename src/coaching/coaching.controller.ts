@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -70,6 +70,12 @@ export class CoachingController {
   @Post('admissions/payments')
   createPayment(@Body() createPaymentDto: CreateAdmissionPaymentDto, @CurrentUser() user: any) {
     return this.coachingService.createPayment(createPaymentDto, user.sub);
+  }
+
+  @Delete('admissions/payments/:id')
+  @Roles(UserRole.ADMIN)
+  deletePayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.coachingService.deletePayment(id, user.sub);
   }
 
   @Get('stats')
