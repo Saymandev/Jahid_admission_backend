@@ -1,7 +1,6 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CoachingModule } from '../coaching/coaching.module';
-import { SocketModule } from '../socket/socket.module';
 import { ResidentialController } from './residential.controller';
 import { ResidentialService } from './residential.service';
 import { AdvanceApplication, AdvanceApplicationSchema } from './schemas/advance-application.schema';
@@ -21,7 +20,6 @@ import { Student, StudentSchema } from './schemas/student.schema';
       { name: SecurityDepositTransaction.name, schema: SecurityDepositTransactionSchema },
       { name: AdvanceApplication.name, schema: AdvanceApplicationSchema },
     ]),
-    forwardRef(() => SocketModule),
     CoachingModule,
   ],
   providers: [ResidentialService],
