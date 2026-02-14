@@ -229,6 +229,7 @@ export class ResidentialController {
     @Query('userFilter') userFilter?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('onlyDeleted') onlyDeleted?: string,
     @CurrentUser() user?: any,
   ) {
     const queryDto = {
@@ -239,6 +240,7 @@ export class ResidentialController {
         userFilter,
         startDate,
         endDate,
+        onlyDeleted: onlyDeleted === 'true',
     };
     // Staff users can only see their own transactions
     const currentUserId = user?.role === 'staff' ? user.sub : undefined;
@@ -259,6 +261,12 @@ export class ResidentialController {
   @Roles(UserRole.ADMIN)
   deletePayment(@Param('id') id: string, @CurrentUser() user: any) {
     return this.residentialService.deletePayment(id, user.sub);
+  }
+
+  @Post('payments/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restorePayment(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.residentialService.restorePayment(id, user.sub);
   }
 
   @Delete('students/:id/advance-payment')

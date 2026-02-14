@@ -612,6 +612,7 @@ export class ResidentialService {
       userFilter?: string;
       startDate?: string;
       endDate?: string;
+      onlyDeleted?: boolean;
     },
     currentUserId?: string,
   ): Promise<any> {
@@ -620,12 +621,12 @@ export class ResidentialService {
     const skip = (page - 1) * limit;
 
     // Filters for Residential
-    const resQuery: any = { isDeleted: false };
+    const resQuery: any = { isDeleted: queryDto.onlyDeleted || false };
     if (currentUserId) resQuery.recordedBy = new Types.ObjectId(currentUserId);
     if (queryDto.userFilter) resQuery.recordedBy = new Types.ObjectId(queryDto.userFilter);
     
     // Filters for Coaching
-    const coachQuery: any = { isDeleted: false };
+    const coachQuery: any = { isDeleted: queryDto.onlyDeleted || false };
     if (currentUserId) coachQuery.recordedBy = new Types.ObjectId(currentUserId);
     if (queryDto.userFilter) coachQuery.recordedBy = new Types.ObjectId(queryDto.userFilter);
 
@@ -1667,6 +1668,46 @@ export class ResidentialService {
     const dueStatus = await this.getStudentDueStatus(student._id.toString());
     this.pusherService.emitDueStatusUpdate(student._id.toString(), dueStatus);
     this.pusherService.emitDashboardUpdate({}); // Refresh dashboard stats
+  }
+
+  async restorePayment(paymentId: string, userId: string): Promise<void> {
+    const payment = await this.paymentModel.findById(paymentId);
+    if (!payment || !payment.isDeleted) {
+      throw new NotFoundException('Archived payment not found');
+    }
+
+    const student = await this.studentModel.findById(payment.studentId);
+    if (!student) {
+      throw new NotFoundException('Student for this payment no longer exists');
+    }
+
+    const oldData = payment.toObject();
+
+    // 1. Balance Restoration
+    if (payment.type === 'security') {
+      student.securityDeposit += payment.paidAmount;
+      // Also restore the security transaction if it exists
+      await this.securityDepositTransactionModel.findOneAndUpdate(
+        { paymentId: payment._id },
+        { isDeleted: false, notes: payment.notes }
+      );
+    } else if (payment.type === 'union_fee') {
+      student.unionFee += payment.paidAmount;
+    }
+
+    await student.save();
+
+    // 2. Un-soft-delete
+    payment.isDeleted = false;
+    payment.deletedAt = undefined;
+    await payment.save();
+
+    await this.createAuditLog('restore_payment', 'Payment', paymentId, userId, oldData, payment.toObject());
+
+    // 3. Emit Updates
+    const dueStatus = await this.getStudentDueStatus(student._id.toString());
+    this.pusherService.emitDueStatusUpdate(student._id.toString(), dueStatus);
+    this.pusherService.emitDashboardUpdate({});
   }
 
   async lookupStudent(phone: string): Promise<any> {
