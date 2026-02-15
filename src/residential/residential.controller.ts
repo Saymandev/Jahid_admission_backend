@@ -85,7 +85,7 @@ export class ResidentialController {
 
   // ========== STUDENT ENDPOINTS ==========
   @Post('students')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
   createStudent(@Body() createStudentDto: CreateStudentDto, @CurrentUser() user: any) {
     return this.residentialService.createStudent(createStudentDto, user.sub);
   }

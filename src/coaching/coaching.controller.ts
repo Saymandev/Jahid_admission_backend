@@ -15,7 +15,7 @@ export class CoachingController {
   constructor(private readonly coachingService: CoachingService) {}
 
   @Post('admissions')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.STAFF)
   createAdmission(@Body() createAdmissionDto: CreateAdmissionDto, @CurrentUser() user: any) {
     return this.coachingService.createAdmission(createAdmissionDto, user.sub);
   }
