@@ -51,7 +51,13 @@ export class PusherService {
     await this.trigger(`student-${studentId}`, 'due-status-update', data);
   }
 
-  async emitNotification(notification: any) {
+  async emitNotification(notification: any, userId?: string) {
+    // Always emit to main-channel for admins
     await this.trigger('main-channel', 'notification', notification);
+    
+    // If a specific userId is targetted/actor, emit to their channel too
+    if (userId) {
+      await this.trigger(`user-${userId}`, 'notification', notification);
+    }
   }
 }

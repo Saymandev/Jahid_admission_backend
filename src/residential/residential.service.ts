@@ -1123,7 +1123,7 @@ export class ResidentialService {
       message: paymentMessage,
       link: `/dashboard/transactions/${payment._id}`,
       timestamp: new Date(),
-    });
+    }, userId);
 
     return payment;
   }

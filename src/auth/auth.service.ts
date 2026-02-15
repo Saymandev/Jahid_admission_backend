@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { AuditService } from '../common/audit/audit.service';
+import { AuditAction } from '../common/audit/schemas/audit-log.schema';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 
@@ -10,6 +12,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private auditService: AuditService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -37,7 +40,7 @@ export class AuthService {
       expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d',
     });
 
-    return {
+    const loginResponse = {
       accessToken,
       refreshToken,
       user: {
@@ -47,6 +50,31 @@ export class AuthService {
         role: user.role,
       },
     };
+
+    // Log login
+    await this.auditService.createAuditLog(
+      AuditAction.LOGIN,
+      'User',
+      user._id,
+      user._id,
+      null,
+      null,
+      `User ${user.name} logged in`,
+    );
+
+    return loginResponse;
+  }
+
+  async logout(userId: string) {
+    await this.auditService.createAuditLog(
+      AuditAction.LOGOUT,
+      'User',
+      null,
+      userId,
+      null,
+      null,
+      `User logged out`,
+    );
   }
 
   async getUserProfile(userId: string) {

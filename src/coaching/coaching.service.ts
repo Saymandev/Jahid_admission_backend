@@ -181,7 +181,7 @@ export class CoachingService {
       message: `Payment of ${createPaymentDto.paidAmount.toLocaleString()} BDT received for ${admission.studentName} - ${admission.course}`,
       link: `/dashboard/transactions/${payment._id}`,
       timestamp: new Date(),
-    });
+    }, userId);
 
     return payment;
   }
