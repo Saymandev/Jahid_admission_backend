@@ -42,6 +42,11 @@ async function bootstrap() {
 }
 
 export default async (req, res) => {
-  const instance = await bootstrap();
-  instance(req, res);
+  try {
+    const instance = await bootstrap();
+    instance(req, res);
+  } catch (error) {
+    console.error('Bootstrap Error:', error);
+    res.status(500).send('Server Initialization Error');
+  }
 };
