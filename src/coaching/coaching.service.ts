@@ -22,6 +22,7 @@ export class CoachingService {
       ...createAdmissionDto,
       admissionId,
       admissionDate: new Date(createAdmissionDto.admissionDate),
+      paidAmount: 0, // Initialize to 0, let createPayment handle the update
       dueAmount: createAdmissionDto.totalFee,
     });
     const savedAdmission = await admission.save();
