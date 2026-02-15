@@ -285,4 +285,32 @@ export class ResidentialController {
   getMonthlyChartData() {
     return this.residentialService.getMonthlyChartData();
   }
+
+  // ========== AUDIT LOG ENDPOINTS ==========
+  @Get('audit-logs')
+  @Roles(UserRole.ADMIN)
+  getAuditLogs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('action') action?: string,
+    @Query('entity') entity?: string,
+    @Query('userId') userId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const pagination: PaginationDto = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search: search,
+    };
+    const filters = {
+      action,
+      entity,
+      userId,
+      startDate,
+      endDate,
+    };
+    return this.residentialService.findAllAuditLogs(pagination, filters);
+  }
 }
