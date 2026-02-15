@@ -1,8 +1,8 @@
-import { AuditAction } from '@/residential/schemas/audit-log.schema';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AuditService } from '../common/audit/audit.service';
+import { AuditAction } from '../common/audit/schemas/audit-log.schema';
 import { PusherService } from '../common/pusher/pusher.service';
 import { PaginationDto } from '../residential/dto/pagination.dto';
 import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
