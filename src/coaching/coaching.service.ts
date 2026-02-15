@@ -34,7 +34,7 @@ export class CoachingService {
         paymentMethod: 'cash', // Default to cash for initial payment, or we could add this to DTO
         notes: 'Initial admission payment',
         transactionId: '',
-      }, 'system'); // 'system' or we need to pass userId to createAdmission
+      }, userId); // Pass actual userId to record payment correctly
     }
 
     return savedAdmission;
