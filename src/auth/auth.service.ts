@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../common/audit/audit.service';
 import { AuditAction } from '../common/audit/schemas/audit-log.schema';
+import { PusherService } from '../common/pusher/pusher.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 
@@ -13,6 +14,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private auditService: AuditService,
+    private pusherService: PusherService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -62,6 +64,15 @@ export class AuthService {
       `User ${user.name} logged in`,
     );
 
+    // Emit notification
+    await this.pusherService.emitNotification({
+      id: `login-${user._id}-${Date.now()}`,
+      type: 'login',
+      title: 'Member Logged In',
+      message: `${user.name} has logged into the system`,
+      timestamp: new Date(),
+    }, user._id.toString());
+
     return loginResponse;
   }
 
@@ -75,6 +86,15 @@ export class AuthService {
       null,
       `User logged out`,
     );
+
+    // Emit notification
+    await this.pusherService.emitNotification({
+      id: `logout-${userId}-${Date.now()}`,
+      type: 'logout',
+      title: 'Member Logged Out',
+      message: `A user has logged out of the system`,
+      timestamp: new Date(),
+    }, userId);
   }
 
   async getUserProfile(userId: string) {

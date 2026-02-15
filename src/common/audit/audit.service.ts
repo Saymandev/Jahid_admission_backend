@@ -22,7 +22,7 @@ export class AuditService {
       const auditLog = new this.auditLogModel({
         action,
         entity,
-        entityId: new Types.ObjectId(entityId),
+        entityId: entityId ? new Types.ObjectId(entityId) : undefined,
         userId: new Types.ObjectId(userId),
         oldData,
         newData,
