@@ -1,6 +1,8 @@
+import { AuditAction } from '@/residential/schemas/audit-log.schema';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { AuditService } from '../common/audit/audit.service';
 import { PusherService } from '../common/pusher/pusher.service';
 import { PaginationDto } from '../residential/dto/pagination.dto';
 import { CreateAdmissionPaymentDto } from './dto/create-admission-payment.dto';
@@ -14,6 +16,7 @@ export class CoachingService {
     @InjectModel(Admission.name) private admissionModel: Model<AdmissionDocument>,
     @InjectModel(AdmissionPayment.name) private paymentModel: Model<AdmissionPaymentDocument>,
     private pusherService: PusherService,
+    private auditService: AuditService,
   ) {}
 
   async createAdmission(createAdmissionDto: CreateAdmissionDto, userId: string): Promise<AdmissionDocument> {
@@ -26,6 +29,15 @@ export class CoachingService {
       dueAmount: createAdmissionDto.totalFee,
     });
     const savedAdmission = await admission.save();
+
+    await this.auditService.createAuditLog(
+      AuditAction.CREATE,
+      'Admission',
+      savedAdmission._id.toString(),
+      userId,
+      null,
+      savedAdmission.toObject(),
+    );
 
     // Handle initial payment if provided
     if (createAdmissionDto.paidAmount && createAdmissionDto.paidAmount > 0) {
@@ -145,6 +157,15 @@ export class CoachingService {
       recordedBy: new Types.ObjectId(userId),
     });
     await payment.save();
+
+    await this.auditService.createAuditLog(
+      AuditAction.PAYMENT,
+      'AdmissionPayment',
+      payment._id.toString(),
+      userId,
+      null,
+      payment.toObject(),
+    );
 
     // Emit real-time updates
     this.pusherService.emitPaymentUpdate({

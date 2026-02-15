@@ -4,6 +4,8 @@ import { Model, Types } from 'mongoose';
 import { CoachingService } from '../coaching/coaching.service';
 import { AdmissionPayment, AdmissionPaymentDocument } from '../coaching/schemas/admission-payment.schema';
 import { Admission, AdmissionDocument } from '../coaching/schemas/admission.schema';
+import { AuditService } from '../common/audit/audit.service';
+import { AuditAction } from '../common/audit/schemas/audit-log.schema';
 import { PusherService } from '../common/pusher/pusher.service';
 import { CreateBulkPaymentDto } from './dto/create-bulk-payment.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -16,7 +18,6 @@ import { UpdateRoomDto } from './dto/update-room.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { UseSecurityDepositDto } from './dto/use-security-deposit.dto';
 import { AdvanceApplication, AdvanceApplicationDocument } from './schemas/advance-application.schema';
-import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 import { Payment, PaymentDocument, PaymentMethod } from './schemas/payment.schema';
 import { Room, RoomDocument, RoomStatus } from './schemas/room.schema';
 import { SecurityDepositTransaction, SecurityDepositTransactionDocument, SecurityDepositTransactionType } from './schemas/security-deposit-transaction.schema';
@@ -28,13 +29,13 @@ export class ResidentialService {
     @InjectModel(Room.name) private roomModel: Model<RoomDocument>,
     @InjectModel(Student.name) private studentModel: Model<StudentDocument>,
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
-    @InjectModel(AuditLog.name) private auditLogModel: Model<AuditLogDocument>,
     @InjectModel(SecurityDepositTransaction.name) private securityDepositTransactionModel: Model<SecurityDepositTransactionDocument>,
     @InjectModel(AdvanceApplication.name) private advanceApplicationModel: Model<AdvanceApplicationDocument>,
     @InjectModel(Admission.name) private admissionModel: Model<AdmissionDocument>,
     @InjectModel(AdmissionPayment.name) private coachingPaymentModel: Model<AdmissionPaymentDocument>,
     private pusherService: PusherService,
     private coachingService: CoachingService,
+    private auditService: AuditService,
   ) { }
 
   // ========== ROOM METHODS ==========
@@ -61,7 +62,7 @@ export class ResidentialService {
     });
     await room.save();
 
-    await this.createAuditLog('create', 'Room', room._id.toString(), userId, null, room.toObject());
+    await this.auditService.createAuditLog(AuditAction.CREATE, 'Room', room._id.toString(), userId, null, room.toObject());
     return room;
   }
 
@@ -144,7 +145,7 @@ export class ResidentialService {
     room.isDeleted = false;
     room.deletedAt = undefined;
     await room.save();
-    await this.createAuditLog('restore', 'Room', id, userId, null, room.toObject());
+    await this.auditService.createAuditLog(AuditAction.UPDATE, 'Room', id, userId, null, room.toObject(), 'Restored room');
     return room;
   }
 
@@ -162,7 +163,7 @@ export class ResidentialService {
     Object.assign(room, updateRoomDto);
     await room.save();
 
-    await this.createAuditLog('update', 'Room', room._id.toString(), userId, oldData, room.toObject());
+    await this.auditService.createAuditLog(AuditAction.UPDATE, 'Room', room._id.toString(), userId, oldData, room.toObject());
     return room;
   }
 
@@ -180,7 +181,7 @@ export class ResidentialService {
     room.deletedAt = new Date();
     await room.save();
 
-    await this.createAuditLog('delete', 'Room', room._id.toString(), userId, room.toObject(), null);
+    await this.auditService.createAuditLog(AuditAction.DELETE, 'Room', room._id.toString(), userId, room.toObject(), null);
   }
 
   // ========== STUDENT METHODS ==========
@@ -317,7 +318,7 @@ export class ResidentialService {
       } as any, userId);
     }
 
-    await this.createAuditLog('create', 'Student', student._id.toString(), userId, null, student.toObject());
+    await this.auditService.createAuditLog(AuditAction.CREATE, 'Student', student._id.toString(), userId, null, student.toObject());
     return student;
   }
 
@@ -384,7 +385,7 @@ export class ResidentialService {
     student.isDeleted = false;
     student.deletedAt = undefined;
     await student.save();
-    await this.createAuditLog('restore', 'Student', id, userId, null, student.toObject());
+    await this.auditService.createAuditLog(AuditAction.UPDATE, 'Student', id, userId, null, student.toObject(), 'Restored student');
     return student;
   }
 
@@ -437,7 +438,7 @@ export class ResidentialService {
     Object.assign(student, updateStudentDto);
     await student.save();
 
-    await this.createAuditLog('update', 'Student', student._id.toString(), userId, oldData, student.toObject());
+    await this.auditService.createAuditLog(AuditAction.UPDATE, 'Student', student._id.toString(), userId, oldData, student.toObject());
     return student;
   }
 
@@ -534,7 +535,7 @@ export class ResidentialService {
     }
     await room.save();
 
-    await this.createAuditLog('reactivate', 'Student', student._id.toString(), userId, oldData, student.toObject());
+    await this.auditService.createAuditLog(AuditAction.REACTIVATE, 'Student', student._id.toString(), userId, oldData, student.toObject());
 
     // Emit real-time updates
     this.pusherService.emitDashboardUpdate(await this.getDashboardStats());
@@ -959,7 +960,7 @@ export class ResidentialService {
     advancePayment.deletedAt = new Date();
     await advancePayment.save();
 
-    await this.createAuditLog('delete', 'Payment', advancePayment._id.toString(), userId, advancePayment.toObject(), null);
+    await this.auditService.createAuditLog(AuditAction.DELETE, 'Payment', advancePayment._id.toString(), userId, advancePayment.toObject(), null);
   }
 
   // ========== PAYMENT METHODS ==========
@@ -1092,7 +1093,7 @@ export class ResidentialService {
 
     }
 
-    await this.createAuditLog('payment', 'Payment', payment._id.toString(), userId, null, payment.toObject());
+    await this.auditService.createAuditLog(AuditAction.PAYMENT, 'Payment', payment._id.toString(), userId, null, payment.toObject());
 
     // Emit real-time updates
     this.pusherService.emitPaymentUpdate({
@@ -1254,7 +1255,7 @@ export class ResidentialService {
     });
     await transaction.save();
 
-    await this.createAuditLog('use_security_deposit', 'SecurityDeposit', transaction._id.toString(), userId, null, transaction.toObject());
+    await this.auditService.createAuditLog(AuditAction.USE_SECURITY_DEPOSIT, 'SecurityDeposit', transaction._id.toString(), userId, null, transaction.toObject());
 
     // Emit updates
     const dueStatus = await this.getStudentDueStatus(studentId);
@@ -1314,7 +1315,7 @@ export class ResidentialService {
     });
     await refundPayment.save();
 
-    await this.createAuditLog('return_security_deposit', 'SecurityDeposit', transaction._id.toString(), userId, null, transaction.toObject());
+    await this.auditService.createAuditLog(AuditAction.RETURN_SECURITY_DEPOSIT, 'SecurityDeposit', transaction._id.toString(), userId, null, transaction.toObject());
 
     // Emit notification
     this.pusherService.emitNotification({
@@ -1512,7 +1513,7 @@ export class ResidentialService {
     };
 
 
-    await this.createAuditLog('checkout', 'Student', student._id.toString(), userId, null, statement);
+    await this.auditService.createAuditLog(AuditAction.CHECKOUT, 'Student', student._id.toString(), userId, null, statement);
 
     // Emit notification
     this.pusherService.emitNotification({
@@ -1662,7 +1663,7 @@ export class ResidentialService {
     payment.deletedAt = new Date();
     await payment.save();
 
-    await this.createAuditLog('delete_payment', 'Payment', paymentId, userId, oldData, payment.toObject());
+    await this.auditService.createAuditLog(AuditAction.DELETE, 'Payment', paymentId, userId, oldData, payment.toObject());
 
     // 4. Emit Updates
     const dueStatus = await this.getStudentDueStatus(student._id.toString());
@@ -1702,7 +1703,7 @@ export class ResidentialService {
     payment.deletedAt = undefined;
     await payment.save();
 
-    await this.createAuditLog('restore_payment', 'Payment', paymentId, userId, oldData, payment.toObject());
+    await this.auditService.createAuditLog(AuditAction.UPDATE, 'Payment', paymentId, userId, null, payment.toObject(), 'Restored payment');
 
     // 3. Emit Updates
     const dueStatus = await this.getStudentDueStatus(student._id.toString());
@@ -1779,29 +1780,7 @@ export class ResidentialService {
     return months;
   }
 
-  private async createAuditLog(
-    action: string,
-    entity: string,
-    entityId: string,
-    userId: string,
-    oldData: any,
-    newData: any,
-  ): Promise<void> {
-    try {
-      const auditLog = new this.auditLogModel({
-        action,
-        entity,
-        entityId: new Types.ObjectId(entityId),
-        userId: new Types.ObjectId(userId),
-        oldData,
-        newData,
-      });
-      await auditLog.save();
-    } catch (error) {
-      // Log error but don't throw - audit logging shouldn't break the main flow
-      console.error('Failed to create audit log:', error);
-    }
-  }
+
   // ========== AUDIT LOG METHODS ==========
   async findAllAuditLogs(
     pagination?: PaginationDto,
@@ -1812,60 +1791,7 @@ export class ResidentialService {
       startDate?: string;
       endDate?: string;
     }
-  ): Promise<{ data: AuditLogDocument[]; total: number; page: number; limit: number; totalPages: number }> {
-    const query: any = {};
-
-    if (filters?.action) {
-      query.action = filters.action;
-    }
-    if (filters?.entity) {
-      query.entity = filters.entity;
-    }
-    if (filters?.userId) {
-      query.userId = new Types.ObjectId(filters.userId);
-    }
-    if (filters?.startDate || filters?.endDate) {
-      const dateRange: any = {};
-      if (filters.startDate) dateRange.$gte = new Date(filters.startDate);
-      if (filters.endDate) {
-        const end = new Date(filters.endDate);
-        end.setHours(23, 59, 59, 999);
-        dateRange.$lte = end;
-      }
-      query.createdAt = dateRange;
-    }
-
-    // Handle search in description or old/new data (optional/expensive, but useful)
-    if (pagination?.search) {
-      const searchRegex = new RegExp(pagination.search, 'i');
-      query.$or = [
-        { description: searchRegex },
-        { entity: searchRegex },
-        { action: searchRegex },
-      ];
-    }
-
-    const page = pagination?.page || 1;
-    const limit = pagination?.limit || 20; // Default to 20 for logs
-    const skip = (page - 1) * limit;
-
-    const [data, total] = await Promise.all([
-      this.auditLogModel
-        .find(query)
-        .populate('userId', 'name email role')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      this.auditLogModel.countDocuments(query).exec(),
-    ]);
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+  ): Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number }> {
+    return this.auditService.findAllAuditLogs(pagination, filters);
   }
 }

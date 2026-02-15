@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AuditModule } from '../common/audit/audit.module';
 import { CoachingController } from './coaching.controller';
 import { CoachingService } from './coaching.service';
 import { AdmissionPayment, AdmissionPaymentSchema } from './schemas/admission-payment.schema';
@@ -11,6 +12,7 @@ import { Admission, AdmissionSchema } from './schemas/admission.schema';
       { name: Admission.name, schema: AdmissionSchema },
       { name: AdmissionPayment.name, schema: AdmissionPaymentSchema },
     ]),
+    AuditModule,
   ],
   providers: [CoachingService],
   controllers: [CoachingController],

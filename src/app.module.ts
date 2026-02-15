@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { CoachingModule } from './coaching/coaching.module';
+import { AuditModule } from './common/audit/audit.module';
 import { PusherModule } from './common/pusher/pusher.module';
 import { CronModule } from './cron/cron.module';
 import { HealthController } from './health/health.controller';
@@ -25,6 +26,7 @@ import { UsersModule } from './users/users.module';
       },
     ]),
     AuthModule,
+    AuditModule,
     UsersModule,
     ResidentialModule,
     CoachingModule,
