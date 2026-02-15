@@ -84,6 +84,10 @@ export class ResidentialService {
       ];
     }
 
+    if (pagination?.status && pagination.status !== 'all') {
+      query.status = pagination.status;
+    }
+
     const page = pagination?.page || 1;
     const limit = pagination?.limit || 10;
     const skip = (page - 1) * limit;
