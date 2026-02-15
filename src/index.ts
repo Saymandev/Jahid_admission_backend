@@ -18,9 +18,17 @@ async function bootstrap() {
     app.use(helmet());
 
     // CORS
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://jahid-admission-frontend.vercel.app',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean);
+
     app.enableCors({
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: allowedOrigins,
       credentials: true,
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+      allowedHeaders: 'Content-Type, Accept, Authorization',
     });
 
     // Global validation pipe
